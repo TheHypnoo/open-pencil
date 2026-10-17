@@ -99,11 +99,13 @@ describe('a .pen stroke written the nested way', () => {
     expect(rect.strokeCap).toBe('ROUND')
   })
 
-  test('is still dropped, and reported, when it declares no fill colour', () => {
+  test('takes the default line colour when it declares no fill colour', () => {
     const json = pen([{ ...RECT, stroke: { align: 'inside', thickness: 1 } }])
-    const { graph, diagnostics } = parse(json)
+    const { diagnostics } = parse(json)
+    const card = byName(json, 'Card')
 
-    expect(at([...graph.getAllNodes()].find((node) => node.name === 'Card')).strokes).toEqual([])
-    expect(diagnostics.map((d) => d.code)).toEqual(['dropped-stroke'])
+    expect(card.strokes).toHaveLength(1)
+    expect(at(card.strokes[0]).weight).toBe(1)
+    expect(diagnostics).toEqual([])
   })
 })

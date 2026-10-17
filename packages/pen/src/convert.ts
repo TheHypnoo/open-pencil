@@ -160,12 +160,6 @@ function parseFillColor(fill: string | PenFillObject, ctx: VarContext): Color {
  */
 const SOLID_FILL_TYPES = new Set(['color', 'solid'])
 
-/** Renders a declared `.pen` value for a report, including the object forms. */
-function renderValue(value: unknown): string {
-  if (typeof value === 'object' && value !== null) return JSON.stringify(value)
-  return String(value)
-}
-
 /** How a `.pen` image fill fits the box it paints. */
 const IMAGE_SCALE_MODES: Record<string, ImageScaleMode> = {
   fit: 'FIT',
@@ -341,21 +335,24 @@ export function convertStroke(
   node?: SceneNode,
   sink?: PenDiagnosticsSink
 ): Stroke[] {
-  if (!stroke?.fill) {
-    if (stroke) {
-      sink?.report({
-        code: 'dropped-stroke',
-        severity: 'dropped',
-        path: '',
-        property: 'stroke',
-        value: renderValue(stroke.thickness),
-        detail:
-          'This stroke declares no colour, so it was dropped. A stroke carries its paint in `stroke`, or in `fill` inside the nested object form.'
-      })
-    }
+  if (!stroke) return []
+  if (!stroke.fill && stroke.thickness === undefined) {
+    sink?.report({
+      code: 'dropped-stroke',
+      severity: 'dropped',
+      path: '',
+      property: 'stroke',
+      detail:
+        'This stroke declares neither a colour nor a weight, so there is nothing to draw and it was dropped.'
+    })
     return []
   }
-  const color = isVarRef(stroke.fill) ? ctx.resolveColor(stroke.fill) : parseColor(stroke.fill)
+  // Real documents leave the colour out on dividers: a cell declares a bottom thickness and no
+  // paint. A declared weight is a line meant to be seen, so it takes the default line colour.
+  let color: Color = { ...BLACK }
+  if (stroke.fill) {
+    color = isVarRef(stroke.fill) ? ctx.resolveColor(stroke.fill) : parseColor(stroke.fill)
+  }
   let align: Stroke['align'] = 'CENTER'
   if (stroke.align === 'inside' || stroke.align === 'inner') align = 'INSIDE'
   else if (stroke.align === 'outside' || stroke.align === 'outer') align = 'OUTSIDE'

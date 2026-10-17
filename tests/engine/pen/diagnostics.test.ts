@@ -104,7 +104,7 @@ describe('pen import diagnostics', () => {
     expect(diagnosticsFor(json)).toEqual([])
   })
 
-  test('reports a stroke it drops for having no fill', () => {
+  test('gives a stroke that declares a weight but no colour the default line colour', () => {
     const json = penDoc([
       {
         type: 'rectangle',
@@ -113,6 +113,27 @@ describe('pen import diagnostics', () => {
         width: 50,
         height: 50,
         stroke: { align: 'inside', thickness: 1 }
+      }
+    ])
+    const { graph, diagnostics } = parsePenDocument(json)
+    const node = [...graph.getAllNodes()].find(
+      (candidate) => candidate.name === 'NoFill' && candidate.type !== 'CANVAS'
+    )
+
+    expect(diagnostics).toEqual([])
+    expect(node?.strokes).toHaveLength(1)
+    expect(node?.strokes[0]?.weight).toBe(1)
+  })
+
+  test('reports a stroke that declares neither a colour nor a weight', () => {
+    const json = penDoc([
+      {
+        type: 'rectangle',
+        id: 's2',
+        name: 'Empty',
+        width: 50,
+        height: 50,
+        stroke: { align: 'inside' }
       }
     ])
     const diagnostic = first(json)
@@ -276,8 +297,9 @@ describe('pen import diagnostics describe a graph they did not change', () => {
   test('names the losses a real fixture actually declares', async () => {
     const { diagnostics } = parsePenDocument(await loadFixture('pencil_simple.pen'))
 
-    // This fixture declares 28 strokes with an alignment and a thickness but no fill colour.
-    expect(diagnostics.filter((d) => d.code === 'dropped-stroke')).toHaveLength(28)
+    // This fixture's 28 dividers declare an alignment and a thickness but no colour, so they now
+    // take the default line colour instead of being dropped.
+    expect(diagnostics.filter((d) => d.code === 'dropped-stroke')).toHaveLength(0)
     expect(diagnostics.every((d) => d.path.startsWith('children['))).toBe(true)
   })
 })
