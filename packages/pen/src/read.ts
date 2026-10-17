@@ -165,6 +165,29 @@ function findCloneByNameFallback(
   return matches.length === 1 ? matches[0] : undefined
 }
 
+/**
+ * Resolves one `descendants` key against an instance. Pencil keys a direct descendant by its
+ * plain node id, and one nested deeper by the slash-separated path that reaches it, such as
+ * `parent/child`. Every segment resolves one level below the previous match, so a plain id is
+ * the single-segment case.
+ */
+function findDescendantClone(
+  graph: SceneGraph,
+  instanceId: string,
+  key: string
+): SceneNode | undefined {
+  let scopeId = instanceId
+  let found: SceneNode | undefined
+  for (const segment of key.split('/')) {
+    found =
+      findCloneByComponentId(graph, scopeId, segment) ??
+      findCloneByNameFallback(graph, scopeId, segment)
+    if (!found) return undefined
+    scopeId = found.id
+  }
+  return found
+}
+
 function applyOverrideProps(
   target: SceneNode,
   overrideData: Partial<PenNode>,
@@ -206,9 +229,7 @@ function applyDescendantOverrides(
 
   for (const [origId, overrideData] of Object.entries(pen.descendants)) {
     sink.within(`descendants[${origId}]`, () => {
-      const clone =
-        findCloneByComponentId(graph, instanceNode.id, origId) ??
-        findCloneByNameFallback(graph, instanceNode.id, origId)
+      const clone = findDescendantClone(graph, instanceNode.id, origId)
 
       if (clone) {
         if (overrideData.children) {
