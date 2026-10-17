@@ -9,7 +9,7 @@ import {
 } from './index'
 
 /** How long a run may take before the document is laid out where it lives instead. */
-const LAYOUT_WORKER_TIMEOUT_MS = 30_000
+const LAYOUT_WORKER_TIMEOUT_MS = 12_000
 
 /**
  * Builds the runner that lays a document out in a worker.
@@ -38,20 +38,25 @@ export function createOffscreenLayoutRunner(): OffscreenLayoutRunner {
       scopeId
     }
     const channel = new MessageChannel()
+    let failure = ''
     const response = await new Promise<OffscreenLayoutResponse>((resolve, reject) => {
       setTimeout(() => reject(new Error('the layout worker timed out')), LAYOUT_WORKER_TIMEOUT_MS)
       channel.port1.onmessage = (event: MessageEvent<OffscreenLayoutResponse>) =>
         resolve(event.data)
-      running.onerror = () => reject(new Error('the layout worker failed'))
+      running.onerror = (event: ErrorEvent) =>
+        reject(new Error(event.message || 'the layout worker failed'))
       running.postMessage(request, [channel.port2])
-    }).catch((): null => null)
+    }).catch((error: unknown): null => {
+      failure = error instanceof Error ? error.message : String(error)
+      return null
+    })
     channel.port1.close()
 
     if (response?.type !== 'geometry') {
       // A worker that could not answer is dropped, so the next document starts a fresh one. The
       // document is still laid out in this thread, so the only cost is the wait that always was.
       console.warn(
-        '[layout] the offscreen runner could not answer; laying the document out in this thread'
+        `[layout] the offscreen runner could not answer${failure ? ` (${failure})` : ''}; laying the document out in this thread`
       )
       running.terminate()
       worker = null

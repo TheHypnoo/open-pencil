@@ -9,6 +9,16 @@ export interface CanvasKitOptions {
   locateFile?: (file: string) => string
 }
 
+/**
+ * Where the browser build serves CanvasKit's files. Unlike {@link getCanvasKit}'s default, this
+ * never consults the environment, so a worker — where `window` does not exist — can use it too.
+ */
+export function browserCanvasKitLocate(file: string): string {
+  const base = 'env' in import.meta ? import.meta.env.BASE_URL : '/'
+  const prefix = base === '/' ? '' : base.replace(/\/$/, '')
+  return `${prefix}/${file}`
+}
+
 export async function getCanvasKit(options?: CanvasKitOptions): Promise<CanvasKit> {
   if (instance) return instance
 
@@ -17,9 +27,7 @@ export async function getCanvasKit(options?: CanvasKitOptions): Promise<CanvasKi
       const ckPath = import.meta.resolve('canvaskit-wasm')
       return decodeURIComponent(new URL(file, ckPath).pathname)
     }
-    const base = 'env' in import.meta ? import.meta.env.BASE_URL : '/'
-    const prefix = base === '/' ? '' : base.replace(/\/$/, '')
-    return `${prefix}/${file}`
+    return browserCanvasKitLocate(file)
   }
 
   instance = await CanvasKitInit({

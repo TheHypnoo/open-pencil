@@ -1,5 +1,5 @@
 import { SkiaRenderer } from '#core/canvas'
-import { initCanvasKit } from '#core/io'
+import { browserCanvasKitLocate, getCanvasKit } from '#core/canvaskit'
 import type { TextMeasurer } from '#core/layout/text-measurement'
 
 import { layoutOffscreen, type OffscreenLayoutRequest, type OffscreenLayoutResponse } from './index'
@@ -11,7 +11,9 @@ import { layoutOffscreen, type OffscreenLayoutRequest, type OffscreenLayoutRespo
 let measurer: TextMeasurer | null = null
 
 async function prepareMeasurer(): Promise<TextMeasurer> {
-  const ck = await initCanvasKit()
+  // `getCanvasKit`'s default locator asks the environment whether it is a browser, and a worker
+  // is not one by that test; naming the files directly is what a worker can rely on.
+  const ck = await getCanvasKit({ locateFile: browserCanvasKitLocate })
   const surface = ck.MakeSurface(1, 1)
   if (!surface) throw new Error('CanvasKit could not make a surface to measure text')
   const renderer = new SkiaRenderer(ck, surface)
