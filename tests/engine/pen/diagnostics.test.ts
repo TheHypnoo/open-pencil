@@ -22,10 +22,13 @@ function codesFor(json: string): string[] {
   return diagnosticsFor(json).map((diagnostic) => diagnostic.code)
 }
 
+function at<T>(value: T | undefined): T {
+  if (value === undefined) throw new Error('expected a value')
+  return value
+}
+
 function first(json: string): PenDiagnostic {
-  const [diagnostic] = diagnosticsFor(json)
-  if (!diagnostic) throw new Error('expected at least one diagnostic')
-  return diagnostic
+  return at(diagnosticsFor(json)[0])
 }
 
 describe('pen import diagnostics', () => {
@@ -117,29 +120,6 @@ describe('pen import diagnostics', () => {
     expect(diagnostic.code).toBe('dropped-stroke')
     expect(diagnostic.severity).toBe('dropped')
     expect(diagnostic.property).toBe('stroke')
-  })
-
-  test('reports a per-side stroke weight it collapses into one number', () => {
-    const json = penDoc([
-      {
-        type: 'rectangle',
-        id: 's2',
-        name: 'PerSide',
-        width: 50,
-        height: 50,
-        stroke: {
-          align: 'inside',
-          thickness: { top: 1, bottom: 3, left: 2, right: 4 },
-          fill: '#000000'
-        }
-      }
-    ])
-    const diagnostic = first(json)
-
-    expect(diagnostic.code).toBe('collapsed-stroke-weight')
-    expect(diagnostic.severity).toBe('degraded')
-    expect(diagnostic.value).toBe('4')
-    expect(diagnostic.detail).toContain('bottom: 3')
   })
 
   test('reports an effect type it drops, naming the declared type', () => {

@@ -32,9 +32,16 @@ export interface PenDocument {
   variables?: Record<string, PenVariable>
 }
 
+type PenStrokeThickness = number | { top?: number; right?: number; bottom?: number; left?: number }
+
+/**
+ * A `.pen` stroke in its nested form. Current Pencil documents write the colour as a plain
+ * `stroke` with a sibling `strokeWidth` instead; {@link normalizePenStroke} folds that into this
+ * shape so one reader handles both.
+ */
 interface PenStroke {
-  align: 'inside' | 'center' | 'outside'
-  thickness: number | { top?: number; right?: number; bottom?: number; left?: number }
+  align?: string
+  thickness?: PenStrokeThickness
   fill?: string
   join?: string
   cap?: string
@@ -79,7 +86,13 @@ export interface PenNode {
   flipY?: boolean
   reusable?: boolean
   cornerRadius?: number | string | (number | string)[]
-  stroke?: PenStroke
+  /** A colour, or the nested object form. See {@link normalizePenStroke}. */
+  stroke?: string | PenStroke
+  /** Stroke weight, written beside a plain `stroke` colour by current documents. */
+  strokeWidth?: PenStrokeThickness
+  strokeAlignment?: string
+  strokeLinejoin?: string
+  strokeLinecap?: string
   effect?: PenEffect | PenEffect[]
   layout?: string
   gap?: number | string
@@ -152,10 +165,30 @@ export function convertFill(
   })
 }
 
+/**
+ * One stroke, however the document declared it. Current `.pen` files put the colour in `stroke`
+ * and the weight in a sibling `strokeWidth`; older ones nest both in an object `stroke`. Returns
+ * `undefined` when the node declares no stroke at all.
+ */
+export function normalizePenStroke(pen: PenNode): PenStroke | undefined {
+  const stroke = pen.stroke
+  if (stroke === undefined) return undefined
+  if (typeof stroke !== 'string') return stroke
+  return {
+    fill: stroke,
+    thickness: pen.strokeWidth ?? 1,
+    align: pen.strokeAlignment,
+    join: pen.strokeLinejoin,
+    cap: pen.strokeLinecap
+  }
+}
+
 function strokeWeight(stroke: PenStroke): number {
-  return typeof stroke.thickness === 'number'
-    ? stroke.thickness
-    : Math.max(...Object.values(stroke.thickness))
+  const thickness = stroke.thickness
+  if (typeof thickness === 'number') return thickness
+  if (thickness === undefined) return 1
+  const sides = Object.values(thickness).filter((side) => typeof side === 'number')
+  return sides.length > 0 ? Math.max(...sides) : 1
 }
 
 export function convertStroke(
@@ -173,15 +206,15 @@ export function convertStroke(
         property: 'stroke',
         value: renderValue(stroke.thickness),
         detail:
-          'This stroke declares no fill colour, so it was dropped. A `.pen` stroke with only an alignment and a thickness carries no paint here.'
+          'This stroke declares no colour, so it was dropped. A stroke carries its paint in `stroke`, or in `fill` inside the nested object form.'
       })
     }
     return []
   }
   const color = isVarRef(stroke.fill) ? ctx.resolveColor(stroke.fill) : parseColor(stroke.fill)
   let align: Stroke['align'] = 'CENTER'
-  if (stroke.align === 'inside') align = 'INSIDE'
-  else if (stroke.align === 'outside') align = 'OUTSIDE'
+  if (stroke.align === 'inside' || stroke.align === 'inner') align = 'INSIDE'
+  else if (stroke.align === 'outside' || stroke.align === 'outer') align = 'OUTSIDE'
 
   const result: Stroke = {
     type: 'SOLID',
@@ -195,18 +228,6 @@ export function convertStroke(
   if (node) {
     bindIfVar(node, 'strokes[0]', stroke.fill, ctx)
     if (typeof stroke.thickness === 'object') {
-      sink?.report({
-        code: 'collapsed-stroke-weight',
-        severity: 'degraded',
-        path: '',
-        property: 'stroke.thickness',
-        value: String(strokeWeight(stroke)),
-        detail: `Per-side stroke weights (${Object.entries(stroke.thickness)
-          .map(([side, weight]) => `${side}: ${weight}`)
-          .join(
-            ', '
-          )}) are kept per side, but the single stroke weight became ${strokeWeight(stroke)}.`
-      })
       node.independentStrokeWeights = true
       node.borderTopWeight = stroke.thickness.top ?? 0
       node.borderRightWeight = stroke.thickness.right ?? 0

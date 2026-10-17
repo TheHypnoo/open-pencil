@@ -22,6 +22,7 @@ import {
   mapNodeType,
   mapTextAlign,
   mapTextAlignVertical,
+  normalizePenStroke,
   parseSize,
   type PenNode
 } from './convert'
@@ -205,7 +206,8 @@ function buildSceneNode(
   const node = graph.createNode(mapNodeType(pen, sink), parentId, overrides)
 
   if (pen.fill !== undefined) node.fills = convertFill(pen.fill, ctx, node, sink)
-  if (pen.stroke) node.strokes = convertStroke(pen.stroke, ctx, node, sink)
+  const stroke = normalizePenStroke(pen)
+  if (stroke) node.strokes = convertStroke(stroke, ctx, node, sink)
   node.effects = convertEffects(pen.effect, sink)
   applyCornerRadius(node, pen.cornerRadius, ctx)
   applyPadding(node, pen.padding, ctx)

@@ -7,6 +7,7 @@ import {
   convertEffects,
   convertFill,
   convertStroke,
+  normalizePenStroke,
   parseSize,
   type PenDocument,
   type PenNode
@@ -54,8 +55,10 @@ function applyRefVisuals(
   if (!compPen) return
   if (pen.fill === undefined && compPen.fill !== undefined)
     node.fills = convertFill(compPen.fill, ctx, node, sink)
-  if (pen.stroke === undefined && compPen.stroke)
-    node.strokes = convertStroke(compPen.stroke, ctx, node, sink)
+  if (pen.stroke === undefined) {
+    const inherited = normalizePenStroke(compPen)
+    if (inherited) node.strokes = convertStroke(inherited, ctx, node, sink)
+  }
   if (pen.effect === undefined && compPen.effect)
     node.effects = convertEffects(compPen.effect, sink)
   if (pen.cornerRadius === undefined) applyCornerRadius(node, compPen.cornerRadius, ctx)

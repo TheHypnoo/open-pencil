@@ -15,7 +15,6 @@ export type PenDiagnosticCode =
   | 'dropped-node'
   | 'unsupported-fill'
   | 'dropped-stroke'
-  | 'collapsed-stroke-weight'
   | 'unsupported-effect'
   | 'unresolved-variable'
   | 'unresolved-component'
