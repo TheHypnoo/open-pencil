@@ -3,65 +3,114 @@ import { collectPenAssetUrls } from '@open-pencil/pen'
 
 import { isTauri } from '@/app/tauri/env'
 
-/** Answers a `.pen` document's image lookups from bytes already read off the disk. */
+/** Answers a document's image lookups from bytes already read. */
 export type PenAssetResolver = (url: string) => Uint8Array | undefined
+
+/** Reports how many assets have been read, so the loading screen can show progress. */
+export type PenAssetProgress = (completed: number, total: number) => void
+
+/** Bounds one image, so a single huge or slow one cannot hold up the open. */
+const MAX_IMAGE_BYTES = 32 * 1024 * 1024
+const IMAGE_TIMEOUT_MS = 20_000
+/** Assets come from unrelated hosts, so a few at a time is enough and kinder to them. */
+const CONCURRENCY = 6
 
 /** A reference the document's own folder cannot answer, such as a remote image. */
 function isRemoteAsset(url: string): boolean {
-  return /^[a-z][a-z0-9+.-]*:/i.test(url)
+  return /^https?:/i.test(url)
 }
 
-/**
- * Reads the image assets a `.pen` document references next to itself.
- *
- * The importer answers asset lookups synchronously, so every local reference is read first and the
- * returned resolver only looks the bytes up. A reference that cannot be read leaves its fill
- * without pixels: the document still opens, and nothing else in it is affected. A remote
- * reference is skipped here, because opening a file must not wait on the network.
- */
-export async function readPenAssetResolver(
-  filePath: string,
-  text: string
-): Promise<PenAssetResolver | undefined> {
-  if (!isTauri()) return undefined
-  const urls = collectPenAssetUrls(text).filter((url) => !isRemoteAsset(url))
-  if (urls.length === 0) return undefined
+async function fetchRemote(url: string): Promise<Uint8Array | undefined> {
+  let response: Response
+  if (isTauri()) {
+    const { tauriFetch } = await import('@/app/tauri/http')
+    response = await tauriFetch(url, {}, MAX_IMAGE_BYTES, IMAGE_TIMEOUT_MS)
+  } else {
+    response = await fetch(url)
+  }
+  return response.ok ? new Uint8Array(await response.arrayBuffer()) : undefined
+}
 
-  const [{ dirname, join }, { readFile }] = await Promise.all([
+async function readLocal(url: string, folder: string): Promise<Uint8Array | undefined> {
+  const [{ join }, { readFile }] = await Promise.all([
     import('@tauri-apps/api/path'),
     import('@tauri-apps/plugin-fs')
   ])
-  const folder = await dirname(filePath)
-  const assets = new Map<string, Uint8Array>()
-  await Promise.all(
-    urls.map(async (url) => {
-      try {
-        assets.set(url, await readFile(await join(folder, url)))
-      } catch (error) {
-        console.warn(`[pen] Could not read the image asset "${url}" next to ${filePath}`, error)
-      }
-    })
-  )
-  return (url) => assets.get(url)
-}
-
-/** Resolves the assets this file needs before it is read, or nothing when it needs none. */
-async function penAssetResolverFor(
-  fileName: string,
-  filePath: string | undefined,
-  data: Uint8Array
-): Promise<PenAssetResolver | undefined> {
-  if (!filePath || !(fileName || filePath).toLowerCase().endsWith('.pen')) return undefined
-  return readPenAssetResolver(filePath, new TextDecoder().decode(data))
+  return readFile(await join(folder, url))
 }
 
 /**
- * Reads a document through the IO registry, giving a `.pen` the image assets it references next
- * to itself. The importer asks for assets synchronously, so they are read before it runs.
+ * Reads one asset. A remote reference goes over the network; a relative one is read next to the
+ * document, which only the desktop build can do. Anything unreadable answers nothing, so the fill
+ * it belongs to opens without pixels instead of failing the document.
  */
-export async function readDocumentWithAssets(io: IORegistry, file: File, filePath?: string) {
+async function readAsset(url: string, folder: string | undefined): Promise<Uint8Array | undefined> {
+  try {
+    if (isRemoteAsset(url)) return await fetchRemote(url)
+    return folder === undefined ? undefined : await readLocal(url, folder)
+  } catch (error) {
+    console.warn(`[pen] Could not read the image "${url}"`, error)
+    return undefined
+  }
+}
+
+/**
+ * Reads every asset the document references, a few at a time, reporting progress as it goes.
+ *
+ * Reading them all before the document is parsed is what lets the importer name each image fill
+ * with the bytes it already has, so nothing has to be fetched once the design is on screen.
+ */
+async function readAssets(
+  urls: readonly string[],
+  folder: string | undefined,
+  onProgress?: PenAssetProgress
+): Promise<PenAssetResolver> {
+  const assets = new Map<string, Uint8Array>()
+  let completed = 0
+  const laneCount = Math.min(CONCURRENCY, urls.length)
+  const lanes = Array.from({ length: laneCount }, (_, lane) =>
+    urls.filter((_, index) => index % laneCount === lane)
+  )
+
+  await Promise.all(
+    lanes.map(async (lane) => {
+      for (const url of lane) {
+        const bytes = await readAsset(url, folder)
+        if (bytes) assets.set(url, bytes)
+        completed += 1
+        onProgress?.(completed, urls.length)
+      }
+    })
+  )
+
+  return (url) => assets.get(url)
+}
+
+/** The folder that holds the document, which is where its relative assets live. */
+async function documentFolder(filePath: string): Promise<string | undefined> {
+  if (!isTauri()) return undefined
+  const { dirname } = await import('@tauri-apps/api/path')
+  return dirname(filePath)
+}
+
+/**
+ * Reads a document through the IO registry, with every asset it references already in hand.
+ *
+ * Opening waits for them, on purpose: a `.pen` document points at its images instead of carrying
+ * them, so fetching afterwards would paint the design first and fill it in later. The loading
+ * screen is where that wait belongs.
+ */
+export async function readDocumentWithAssets(
+  io: IORegistry,
+  file: File,
+  filePath: string | undefined,
+  onProgress?: PenAssetProgress
+) {
   const data = new Uint8Array(await file.arrayBuffer())
-  const resolveAsset = await penAssetResolverFor(file.name, filePath, data)
+  const isPen = (filePath ?? file.name).toLowerCase().endsWith('.pen')
+  const urls = isPen ? collectPenAssetUrls(new TextDecoder().decode(data)) : []
+  const folder = filePath === undefined ? undefined : await documentFolder(filePath)
+  const resolveAsset = await readAssets(urls, folder, onProgress)
   return io.readDocument(
     { name: file.name, mimeType: file.type || undefined, data },
     { resolveAsset }
