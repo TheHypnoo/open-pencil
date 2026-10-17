@@ -169,6 +169,8 @@ function renderValue(value: unknown): string {
 /** How a `.pen` image fill fits the box it paints. */
 const IMAGE_SCALE_MODES: Record<string, ImageScaleMode> = {
   fit: 'FIT',
+  contain: 'FIT',
+  cover: 'FILL',
   fill: 'FILL',
   crop: 'CROP',
   tile: 'TILE'

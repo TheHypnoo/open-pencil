@@ -48,6 +48,18 @@ describe('an image fill', () => {
 
     expect(at(fill).type).not.toBe('SOLID')
   })
+
+  test('reads the cover and contain names the format actually writes', () => {
+    const cover = hero(
+      pen([{ ...HERO, fill: { type: 'image', url: 'assets/hero.png', mode: 'cover' } }])
+    ).fills
+    const contain = hero(
+      pen([{ ...HERO, fill: { type: 'image', url: 'assets/hero.png', mode: 'contain' } }])
+    ).fills
+
+    expect(at(cover[0]).imageScaleMode).toBe('FILL')
+    expect(at(contain[0]).imageScaleMode).toBe('FIT')
+  })
 })
 
 describe('an image fill whose bytes the caller can read', () => {
