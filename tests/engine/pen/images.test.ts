@@ -134,3 +134,36 @@ describe('collecting the asset urls a document references', () => {
     expect(collectPenAssetUrls(json)).toEqual([])
   })
 })
+
+describe('the url an image fill came from', () => {
+  test('is kept on the fill, so a caller can resolve it after the import', () => {
+    const [fill] = hero(pen([HERO])).fills
+
+    expect(at(fill).imageURL).toBe('assets/hero.png')
+  })
+
+  test('is kept even when the bytes were read, so a later resolve can still find them', () => {
+    const { graph } = parsePenDocument(pen([HERO]), { resolveAsset: () => PNG })
+    const nodes = [...graph.getAllNodes()].filter((node) => node.type !== 'CANVAS')
+    const [fill] = at(nodes.find((node) => node.name === 'Hero')).fills
+
+    expect(at(fill).imageURL).toBe('assets/hero.png')
+    expect(at(fill).imageHash).toBe(computeImageHash(PNG))
+  })
+
+  test('keeps a remote url, the case a folder on disk cannot answer', () => {
+    const remote: PenNode = {
+      ...HERO,
+      fill: { type: 'image', url: 'https://cdn.example.com/hero.png', mode: 'fit' }
+    }
+    const [fill] = hero(pen([remote])).fills
+
+    expect(at(fill).imageURL).toBe('https://cdn.example.com/hero.png')
+  })
+
+  test('is absent for a fill that declares no url', () => {
+    const [fill] = hero(pen([{ ...HERO, fill: { type: 'image', mode: 'fit' } }])).fills
+
+    expect(at(fill).imageURL).toBeUndefined()
+  })
+})

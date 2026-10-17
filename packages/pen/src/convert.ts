@@ -174,6 +174,7 @@ function convertImageFill(item: PenFillObject, visible: boolean, sink?: PenDiagn
     color: { ...BLACK },
     imageScaleMode: IMAGE_SCALE_MODES[item.mode ?? ''] ?? 'FILL'
   }
+  if (item.url !== undefined) fill.imageURL = item.url
   if (imageHash !== undefined) fill.imageHash = imageHash
   return fill
 }

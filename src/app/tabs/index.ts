@@ -15,6 +15,7 @@ import { requestDocumentClose } from '@/app/document/close/prompt'
 import { readDocumentWithAssets } from '@/app/document/io/assets'
 import { readFigDocument } from '@/app/document/io/fig'
 import { applyImportedDocument } from '@/app/document/io/imported-document'
+import { hydrateImages } from '@/app/document/io/remote-images'
 import type { DocumentSourceIdentity } from '@/app/document/io/types'
 import { getRecoveryStore, type RecoverySnapshotMeta } from '@/app/document/recovery'
 import { setActiveEditorStore } from '@/app/editor/active-store'
@@ -479,6 +480,7 @@ export async function openFileInNewTab(
       const result = await readDocumentWithAssets(io, file, path)
       imported = result.graph
       sourceFormat = result.sourceFormat
+      hydrateImages(result.graph, () => store.requestRender())
     }
 
     await showImportedGraph(

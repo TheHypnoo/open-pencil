@@ -41,7 +41,7 @@ export interface PenDiagnostic {
   detail: string
 }
 
-/** Receives fidelity losses, and answers the asset lookups conversion needs. */
+/** Receives fidelity losses, and answers the lookups conversion needs. */
 export interface PenDiagnosticsSink {
   report(diagnostic: PenDiagnostic): void
   /** The name an image asset's bytes are stored under, or undefined when it cannot be read. */
