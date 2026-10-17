@@ -1,7 +1,10 @@
 import type { Node as YogaNode } from 'yoga-layout'
 
 import { enforcedAspectRatio, type SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
-import { layoutConstrainedChildRect } from '@open-pencil/scene-graph/resize'
+import {
+  layoutConstrainedChildRect,
+  scaleVectorNetworkForResize
+} from '@open-pencil/scene-graph/resize'
 
 import { keepsSavedLayout, usesDetachedDerivedLayout } from './derived'
 
@@ -22,7 +25,7 @@ function preservesImportedHugCrossSize(
     )
 }
 
-type LayoutGeometry = Partial<Pick<SceneNode, 'x' | 'y' | 'width' | 'height'>>
+type LayoutGeometry = Partial<Pick<SceneNode, 'x' | 'y' | 'width' | 'height' | 'vectorNetwork'>>
 
 /**
  * Writes only the geometry layout changed. Laying out a large page leaves most layers where they
@@ -45,6 +48,19 @@ function writeLayoutGeometry(
   for (const key of ['x', 'y', 'width', 'height'] as const) {
     const value = geometry[key]
     if (value !== undefined && value !== node[key]) changes[key] = value
+  }
+  // A path's geometry is baked at the size it was drawn, so a size the layout gives it has to
+  // rescale that geometry too. Without this a path keeps its old extent and draws outside the box,
+  // which is what an instance smaller than its component turns into.
+  if (node.type === 'VECTOR') {
+    const network = scaleVectorNetworkForResize(
+      node.vectorNetwork,
+      node.width,
+      node.height,
+      changes.width ?? node.width,
+      changes.height ?? node.height
+    )
+    if (network) changes.vectorNetwork = network
   }
   if (Object.keys(changes).length > 0) graph.updateNode(id, changes)
   if (!CONSTRAINT_PARENT_TYPES.has(node.type)) return
