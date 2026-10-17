@@ -140,6 +140,17 @@ describe('the text measurement cache', () => {
     })
   })
 
+  test('does not let a delimiter inside a value imitate the field boundary', () => {
+    const graph = new SceneGraph()
+    withCountingMeasurer((calls) => {
+      // Joined with a NUL, these two read as the same key unless the value's own NUL is escaped.
+      measureTextForLayout(textNode(graph, { text: 'A\u0000B', fontFamily: 'C' }))
+      measureTextForLayout(textNode(graph, { text: 'A', fontFamily: 'B\u0000C' }))
+
+      expect(calls()).toBe(2)
+    })
+  })
+
   test('answers a temporary measurer with its own sizes, never the installed one’s', () => {
     const graph = new SceneGraph()
     const node = textNode(graph)

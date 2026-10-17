@@ -74,10 +74,15 @@ function measurementKey(node: SceneNode, maxWidth?: number): string {
   )
 }
 
-/** One field of a cache key: a string as it is, anything else as the JSON it holds. */
+/**
+ * One field of a cache key: a string with the delimiter escaped, anything else as the JSON it
+ * holds. Fields are joined with a NUL, so a NUL inside a value is doubled to keep it from reading
+ * as the boundary between two fields.
+ */
 function fieldKey(value: unknown): string {
   if (value === null || value === undefined) return ''
-  return typeof value === 'string' ? value : JSON.stringify(value)
+  if (typeof value !== 'string') return JSON.stringify(value)
+  return value.replaceAll('\u0000', '\u0000\u0000')
 }
 
 const estimateCache = createMeasurementCache()
