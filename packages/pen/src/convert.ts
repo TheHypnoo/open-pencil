@@ -95,6 +95,8 @@ export interface PenNode {
   strokeLinecap?: string
   effect?: PenEffect | PenEffect[]
   layout?: string
+  /** `absolute` takes the node out of its parent's auto layout flow. */
+  layoutPosition?: string
   gap?: number | string
   padding?: PenPadding
   justifyContent?: string
@@ -104,6 +106,7 @@ export interface PenNode {
   fontFamily?: string
   fontSize?: number
   fontWeight?: string | number
+  fontStyle?: string
   lineHeight?: number
   letterSpacing?: number
   textAlign?: string

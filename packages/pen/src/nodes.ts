@@ -5,6 +5,7 @@ import type {
   LayoutSizing,
   SceneGraph,
   SceneNode,
+  TextAutoResize,
   VectorNetwork
 } from '@open-pencil/scene-graph'
 import { parseSVGPath } from '@open-pencil/scene-graph/parse-path'
@@ -76,6 +77,7 @@ function buildBaseOverrides(pen: PenNode): Partial<SceneNode> {
     flipX: pen.flipX ?? false,
     flipY: pen.flipY ?? false,
     clipsContent: pen.clip ?? false,
+    layoutPositioning: pen.layoutPosition === 'absolute' ? 'ABSOLUTE' : 'AUTO',
     boundVariables: {}
   }
 }
@@ -107,6 +109,13 @@ function applyAutoLayout(
   }
 }
 
+/** How a document's text growth becomes the resize behaviour of the node. */
+const TEXT_GROWTH_RESIZE: Record<string, TextAutoResize> = {
+  'fixed-width': 'HEIGHT',
+  // Fixed on both axes, so the box never grows to fit the text.
+  'fixed-width-height': 'NONE'
+}
+
 function applyTextProps(node: SceneNode, pen: PenNode, ctx: VarContext): void {
   node.text = pen.type === 'icon_font' ? (pen.iconFontName ?? '') : (pen.content ?? '')
   node.fontFamily =
@@ -117,13 +126,14 @@ function applyTextProps(node: SceneNode, pen: PenNode, ctx: VarContext): void {
   node.fontWeight = mapFontWeight(
     pen.fontWeight ?? (pen.type === 'icon_font' ? pen.weight : undefined)
   )
+  if (pen.fontStyle === 'italic') node.italic = true
   node.textAlignHorizontal = mapTextAlign(pen.textAlign)
   node.textAlignVertical = mapTextAlignVertical(pen.textAlignVertical)
   if (pen.lineHeight !== undefined) {
     node.lineHeight = pen.lineHeight < 5 ? pen.lineHeight * node.fontSize : pen.lineHeight
   }
   if (pen.letterSpacing !== undefined) node.letterSpacing = pen.letterSpacing
-  node.textAutoResize = pen.textGrowth === 'fixed-width' ? 'HEIGHT' : 'WIDTH_AND_HEIGHT'
+  node.textAutoResize = TEXT_GROWTH_RESIZE[pen.textGrowth ?? ''] ?? 'WIDTH_AND_HEIGHT'
   if (pen.fontFamily && isVarRef(pen.fontFamily)) {
     bindIfVar(node, 'fontFamily', pen.fontFamily, ctx)
   }
