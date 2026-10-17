@@ -329,7 +329,13 @@ export {
 } from './clipboard'
 export { probeGlyphOutlineCommands, type GlyphOutlineProbe } from './text/opentype'
 
-export { readPenFile, parsePenFile } from '@open-pencil/pen'
+export {
+  readPenFile,
+  parsePenFile,
+  parsePenDocument,
+  type PenDiagnostic,
+  type PenImportResult
+} from '@open-pencil/pen'
 
 export {
   readFigFile,

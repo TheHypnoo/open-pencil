@@ -1,5 +1,6 @@
 import type { CanvasKit } from 'canvaskit-wasm'
 
+import type { PenDiagnostic } from '@open-pencil/pen'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 import type { RenderColorSpace } from '@open-pencil/scene-graph/color'
 
@@ -26,6 +27,12 @@ export interface ReadDocumentInput {
 export interface ReadDocumentResult {
   graph: SceneGraph
   sourceFormat: string
+  /**
+   * Declarations this reader could not represent faithfully. Absent for a reader that never
+   * reports losses, and empty for an import that lost nothing. Today only the `.pen` reader
+   * produces them; a second reporting format should generalise this type then.
+   */
+  diagnostics?: PenDiagnostic[]
 }
 
 export interface ExportTargetDocument {

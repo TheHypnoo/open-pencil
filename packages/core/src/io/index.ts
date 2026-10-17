@@ -20,7 +20,7 @@ export {
   type FigFileExtrasOptions,
   type ParseFigFileOptions
 } from './formats/fig'
-export { parsePenFile, readPenFile } from '@open-pencil/pen'
+export { parsePenDocument, parsePenFile, readPenFile, type PenImportResult } from '@open-pencil/pen'
 export {
   computeContentBounds,
   renderNodesToImage,

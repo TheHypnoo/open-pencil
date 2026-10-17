@@ -1,5 +1,5 @@
 import { sceneNodeToJSX, selectionToJSX } from '@open-pencil/design-jsx'
-import { parsePenFile } from '@open-pencil/pen'
+import { parsePenDocument } from '@open-pencil/pen'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { layoutAuthoredNodes } from '#core/layout'
@@ -228,13 +228,13 @@ export const penFormat: IOFormatAdapter<'pen'> = {
   },
   async readDocument(input) {
     const text = new TextDecoder().decode(input.data)
-    const graph = parsePenFile(text)
+    const { graph, diagnostics } = parsePenDocument(text)
     // A .pen file stores its layout intent, not the sizes and positions it implies.
     layoutAuthoredNodes(
       graph,
       graph.getPages().map((page) => page.id)
     )
-    return { graph, sourceFormat: 'pen' }
+    return { graph, sourceFormat: 'pen', diagnostics }
   }
 }
 
