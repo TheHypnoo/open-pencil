@@ -101,9 +101,29 @@ export async function applyRemoteImages(
 }
 
 /**
- * Reads a document's remote images once it is on screen, repainting as each one lands. Opening a
+ * Reads a document's remote images once it is on screen, repainting as they land. Opening a
  * document never waits on this: it is started and left to finish on its own.
+ *
+ * Repaints are batched, because a document can reference dozens of images and each repaint of a
+ * large one costs a frame: without this, sixty images would ask for sixty repaints of a document
+ * that may hold twenty thousand nodes.
  */
 export function hydrateImages(graph: SceneGraph, requestRender: () => void): void {
-  void applyRemoteImages(graph, fetchImageBytes, requestRender)
+  void applyRemoteImages(graph, fetchImageBytes, coalesceRepaints(requestRender))
+}
+
+/** How long an arriving image waits for others before the document repaints once. */
+const REPAINT_INTERVAL_MS = 120
+
+/** Runs `repaint` at most once per interval, however many times it is asked for. */
+function coalesceRepaints(repaint: () => void): () => void {
+  let scheduled = false
+  return () => {
+    if (scheduled) return
+    scheduled = true
+    setTimeout(() => {
+      scheduled = false
+      repaint()
+    }, REPAINT_INTERVAL_MS)
+  }
 }
