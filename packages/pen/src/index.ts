@@ -1,4 +1,5 @@
-export { parsePenDocument, parsePenFile, readPenFile, type PenImportResult } from './read'
+export { parsePenDocument, parsePenFile, readPenFile } from './read'
+export type { PenImportOptions, PenImportResult } from './read'
 export * from './convert'
 export * from './diagnostics'
 export * from './variables'

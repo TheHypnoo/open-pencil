@@ -41,9 +41,11 @@ export interface PenDiagnostic {
   detail: string
 }
 
-/** Receives fidelity losses. The importer never throws for one. */
+/** Receives fidelity losses, and answers the asset lookups conversion needs. */
 export interface PenDiagnosticsSink {
   report(diagnostic: PenDiagnostic): void
+  /** The name an image asset's bytes are stored under, or undefined when it cannot be read. */
+  resolveImage?: (url: string) => string | undefined
 }
 
 export interface PenDiagnosticsCollector extends PenDiagnosticsSink {
@@ -52,12 +54,15 @@ export interface PenDiagnosticsCollector extends PenDiagnosticsSink {
   within<T>(segment: string, body: () => T): T
 }
 
-export function createPenDiagnosticsCollector(): PenDiagnosticsCollector {
+export function createPenDiagnosticsCollector(
+  resolveImage?: (url: string) => string | undefined
+): PenDiagnosticsCollector {
   const entries: PenDiagnostic[] = []
   const segments: string[] = []
 
   return {
     entries,
+    resolveImage,
     report(diagnostic) {
       entries.push({
         ...diagnostic,

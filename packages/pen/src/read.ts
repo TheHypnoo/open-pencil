@@ -1,4 +1,4 @@
-import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
+import { computeImageHash, SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 import { copyEffects, copyFills, copyStrokes } from '@open-pencil/scene-graph/copy'
 import { populateInstanceChildren } from '@open-pencil/scene-graph/instances'
 
@@ -363,11 +363,39 @@ export interface PenImportResult {
   diagnostics: PenDiagnostic[]
 }
 
+export interface PenImportOptions {
+  /**
+   * Reads the bytes an image fill points at. A `.pen` document names its assets relative to
+   * itself, and the importer only receives its text, so the caller that knows where the file
+   * lives supplies them. Without it a fill keeps its scale mode but no pixels.
+   */
+  resolveAsset?: (url: string) => Uint8Array | undefined
+}
+
+/**
+ * Names an image asset's bytes by their content, once per url, and keeps them in the graph. A
+ * document can point many fills at one asset, so each one is read once.
+ */
+function imageResolver(
+  graph: SceneGraph,
+  resolveAsset?: (url: string) => Uint8Array | undefined
+): (url: string) => string | undefined {
+  const resolved = new Map<string, string | undefined>()
+  return (url) => {
+    if (resolved.has(url)) return resolved.get(url)
+    const data = resolveAsset?.(url)
+    const hash = data ? computeImageHash(data) : undefined
+    if (data && hash) graph.images.set(hash, data)
+    resolved.set(url, hash)
+    return hash
+  }
+}
+
 /**
  * Parses a `.pen` document and reports what the import could not represent faithfully.
  * Prefer this over {@link parsePenFile} when the caller can show the losses to a user.
  */
-export function parsePenDocument(json: string): PenImportResult {
+export function parsePenDocument(json: string, options: PenImportOptions = {}): PenImportResult {
   const doc: PenDocument = JSON.parse(json)
   const graph = new SceneGraph()
 
@@ -375,7 +403,7 @@ export function parsePenDocument(json: string): PenImportResult {
     graph.deleteNode(page.id)
   }
 
-  const sink = createPenDiagnosticsCollector()
+  const sink = createPenDiagnosticsCollector(imageResolver(graph, options.resolveAsset))
   const ctx = buildVarContext(graph, doc.variables ?? {}, doc.themes ?? {}, sink)
   const componentIds = new Map<string, string>()
   const penSources = new Map<string, PenNode>()
@@ -417,10 +445,10 @@ export function parsePenDocument(json: string): PenImportResult {
 }
 
 /** Parses a `.pen` document into a graph, discarding the import diagnostics. */
-export function parsePenFile(json: string): SceneGraph {
-  return parsePenDocument(json).graph
+export function parsePenFile(json: string, options?: PenImportOptions): SceneGraph {
+  return parsePenDocument(json, options).graph
 }
 
-export async function readPenFile(file: File): Promise<SceneGraph> {
-  return parsePenFile(await file.text())
+export async function readPenFile(file: File, options?: PenImportOptions): Promise<SceneGraph> {
+  return parsePenFile(await file.text(), options)
 }

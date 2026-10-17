@@ -226,9 +226,11 @@ export const penFormat: IOFormatAdapter<'pen'> = {
   matchesFile(fileName, mimeType) {
     return lowerExt(fileName) === 'pen' || mimeType === 'application/json'
   },
-  async readDocument(input) {
+  async readDocument(input, context) {
     const text = new TextDecoder().decode(input.data)
-    const { graph, diagnostics } = parsePenDocument(text)
+    const { graph, diagnostics } = parsePenDocument(text, {
+      resolveAsset: context?.resolveAsset
+    })
     // A .pen file stores its layout intent, not the sizes and positions it implies.
     layoutAuthoredNodes(
       graph,

@@ -8,6 +8,7 @@ import type {
   Color,
   Effect,
   Fill,
+  ImageScaleMode,
   LayoutAlign,
   LayoutCounterAlign,
   LayoutMode,
@@ -20,6 +21,7 @@ import type {
   TextAlignVertical
 } from '@open-pencil/scene-graph'
 import { parseColor } from '@open-pencil/scene-graph/color'
+import { BLACK } from '@open-pencil/scene-graph/constants'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import type { PenDiagnosticsSink } from './diagnostics'
@@ -58,8 +60,13 @@ interface PenEffect {
 
 interface PenFillObject {
   type: string
-  color: string
+  /** The colour of a plain fill. An image fill carries its paint in `url` instead. */
+  color?: string
   enabled?: boolean
+  /** Where an image fill keeps its asset, relative to the document. */
+  url?: string
+  /** How an image fill fits its box: `fit`, `fill`, `crop` or `tile`. */
+  mode?: string
 }
 
 type PenFill = string | PenFillObject | PenFillObject[]
@@ -128,6 +135,7 @@ export interface PenNode {
 
 function parseFillColor(fill: string | PenFillObject, ctx: VarContext): Color {
   const raw = typeof fill === 'string' ? fill : fill.color
+  if (raw === undefined) return { ...BLACK }
   return isVarRef(raw) ? ctx.resolveColor(raw) : parseColor(raw)
 }
 
@@ -144,6 +152,32 @@ function renderValue(value: unknown): string {
   return String(value)
 }
 
+/** How a `.pen` image fill fits the box it paints. */
+const IMAGE_SCALE_MODES: Record<string, ImageScaleMode> = {
+  fit: 'FIT',
+  fill: 'FILL',
+  crop: 'CROP',
+  tile: 'TILE'
+}
+
+/**
+ * An image fill keeps its paint and the way it fits its box. The pixels are the caller's to
+ * supply: a document names its assets relative to itself, and a renderer only has what the graph
+ * holds under `imageHash`.
+ */
+function convertImageFill(item: PenFillObject, visible: boolean, sink?: PenDiagnosticsSink): Fill {
+  const imageHash = item.url === undefined ? undefined : sink?.resolveImage?.(item.url)
+  const fill: Fill = {
+    type: 'IMAGE',
+    visible,
+    opacity: 1,
+    color: { ...BLACK },
+    imageScaleMode: IMAGE_SCALE_MODES[item.mode ?? ''] ?? 'FILL'
+  }
+  if (imageHash !== undefined) fill.imageHash = imageHash
+  return fill
+}
+
 export function convertFill(
   fill: PenFill | undefined,
   ctx: VarContext,
@@ -153,6 +187,10 @@ export function convertFill(
   if (fill === undefined) return []
   const fills = Array.isArray(fill) ? fill : [fill]
   return fills.map((item, index) => {
+    const visible = typeof item === 'string' ? true : item.enabled !== false
+    if (typeof item !== 'string' && item.type === 'image') {
+      return convertImageFill(item, visible, sink)
+    }
     if (typeof item !== 'string' && !SOLID_FILL_TYPES.has(item.type)) {
       sink?.report({
         code: 'unsupported-fill',
@@ -163,7 +201,6 @@ export function convertFill(
         detail: `Fill type "${item.type}" has no equivalent yet, so this paint was approximated as a solid fill.`
       })
     }
-    const visible = typeof item === 'string' ? true : item.enabled !== false
     const color = parseFillColor(item, ctx)
     const result: Fill = { type: 'SOLID', visible, opacity: color.a, color }
     if (node) bindIfVar(node, `fills[${index}]`, typeof item === 'string' ? item : item.color, ctx)

@@ -1,4 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 
 import { SkiaRenderer } from '@open-pencil/core/canvas'
 import { BUILTIN_IO_FORMATS, IORegistry, initCanvasKit } from '@open-pencil/core/io'
@@ -16,9 +18,24 @@ export const CLI_IO_FORMATS = [...BUILTIN_IO_FORMATS, headlessHTMLReader]
 
 const io = new IORegistry(CLI_IO_FORMATS)
 
+/**
+ * Reads an asset a document references relative to itself. A `.pen` document names its images
+ * that way, so opening one from disk is the only way its fills get pixels.
+ */
+function documentAssetResolver(filePath: string): (assetPath: string) => Uint8Array | undefined {
+  const base = dirname(resolve(filePath))
+  return (assetPath) => {
+    const path = resolve(base, assetPath)
+    return existsSync(path) ? new Uint8Array(readFileSync(path)) : undefined
+  }
+}
+
 export async function loadDocument(filePath: string): Promise<SceneGraph> {
   const bytes = new Uint8Array(await readFile(filePath))
-  const { graph } = await io.readDocument({ name: filePath, data: bytes })
+  const { graph } = await io.readDocument(
+    { name: filePath, data: bytes },
+    { resolveAsset: documentAssetResolver(filePath) }
+  )
   graph.applyDerivedLayoutDuring(() => computeAllLayouts(graph))
   return graph
 }
