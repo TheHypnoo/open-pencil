@@ -74,11 +74,11 @@ describe('pen import diagnostics', () => {
     const json = penDoc([
       {
         type: 'rectangle',
-        id: 'g1',
-        name: 'Gradient',
+        id: 'v1',
+        name: 'Video',
         width: 50,
         height: 50,
-        fill: { type: 'gradient', color: '#00ff00' }
+        fill: { type: 'video' }
       }
     ])
     const diagnostic = first(json)
@@ -86,7 +86,7 @@ describe('pen import diagnostics', () => {
     expect(diagnostic.code).toBe('unsupported-fill')
     expect(diagnostic.severity).toBe('degraded')
     expect(diagnostic.property).toBe('fill')
-    expect(diagnostic.value).toBe('gradient')
+    expect(diagnostic.value).toBe('video')
   })
 
   test('reports nothing for a plain colour object fill', () => {

@@ -8,6 +8,8 @@ import type {
   Color,
   Effect,
   Fill,
+  FillType,
+  GradientTransform,
   ImageScaleMode,
   LayoutAlign,
   LayoutCounterAlign,
@@ -22,6 +24,7 @@ import type {
 } from '@open-pencil/scene-graph'
 import { parseColor } from '@open-pencil/scene-graph/color'
 import { BLACK } from '@open-pencil/scene-graph/constants'
+import { DEFAULT_GRADIENT_TRANSFORM } from '@open-pencil/scene-graph/gradient'
 import type { Vector } from '@open-pencil/scene-graph/primitives'
 
 import type { PenDiagnosticsSink } from './diagnostics'
@@ -58,6 +61,11 @@ interface PenEffect {
   spread?: number
 }
 
+interface PenGradientStop {
+  color: string
+  position: number
+}
+
 interface PenFillObject {
   type: string
   /** The colour of a plain fill. An image fill carries its paint in `url` instead. */
@@ -67,6 +75,12 @@ interface PenFillObject {
   url?: string
   /** How an image fill fits its box: `fit`, `fill`, `crop` or `tile`. */
   mode?: string
+  /** Which gradient this is: `linear`, `radial`, `angular` or `diamond`. */
+  gradientType?: string
+  /** A linear gradient's angle in degrees, turning clockwise from pointing up. */
+  rotation?: number
+  size?: { width?: number; height?: number }
+  colors?: PenGradientStop[]
 }
 
 type PenFill = string | PenFillObject | PenFillObject[]
@@ -179,6 +193,86 @@ function convertImageFill(item: PenFillObject, visible: boolean, sink?: PenDiagn
   return fill
 }
 
+/** How a `.pen` gradient kind becomes a fill type; a kind not listed here has no equivalent. */
+const GRADIENT_FILL_TYPES: Partial<Record<string, FillType>> = {
+  linear: 'GRADIENT_LINEAR',
+  radial: 'GRADIENT_RADIAL',
+  angular: 'GRADIENT_ANGULAR',
+  diamond: 'GRADIENT_DIAMOND'
+}
+
+/** Keeps an angle that lands on an axis from leaving float noise, or a negative zero, in the matrix. */
+function roundMatrixValue(value: number): number {
+  const rounded = Math.round(value * 1e6) / 1e6
+  return rounded === 0 ? 0 : rounded
+}
+
+/**
+ * The transform a `.pen` gradient angle describes.
+ *
+ * `gradientTransform` maps the layer's unit square to gradient space, where a linear gradient runs
+ * from (0, 0.5) to (1, 0.5). The angle turns clockwise from pointing up, as CSS writes
+ * `linear-gradient`, so 90 is the engine's identity transform and 180 points down. Those are the
+ * two angles that pin the convention down: the documents triaged so far all use 180.
+ */
+function gradientTransformFor(rotation: number): GradientTransform {
+  const radians = (rotation * Math.PI) / 180
+  const along = Math.sin(radians)
+  const across = Math.cos(radians)
+  const extent = Math.abs(along) + Math.abs(across)
+  // Where the unit square starts along each axis, so the gradient spans it exactly.
+  const alongStart = Math.min(0, along) - Math.max(0, across)
+  const acrossStart = Math.min(0, across) + Math.min(0, along)
+  return {
+    m00: roundMatrixValue(along / extent),
+    m01: roundMatrixValue(-across / extent),
+    m02: roundMatrixValue(-alongStart / extent),
+    m10: roundMatrixValue(across / extent),
+    m11: roundMatrixValue(along / extent),
+    m12: roundMatrixValue(-acrossStart / extent)
+  }
+}
+
+/**
+ * A gradient fill keeps its stops and its kind. Only a linear gradient's angle is placed exactly;
+ * every other kind is drawn centred on the layer and reported, because `.pen` describes their
+ * geometry with fields this reader does not interpret yet.
+ */
+function convertGradientFill(
+  item: PenFillObject,
+  visible: boolean,
+  ctx: VarContext,
+  sink?: PenDiagnosticsSink
+): Fill | undefined {
+  const kind = item.gradientType ?? 'linear'
+  const type = GRADIENT_FILL_TYPES[kind]
+  if (type === undefined) return undefined
+  if (type !== 'GRADIENT_LINEAR') {
+    sink?.report({
+      code: 'unsupported-fill',
+      severity: 'degraded',
+      path: '',
+      property: 'fill',
+      value: kind,
+      detail: `A "${kind}" gradient is drawn centred, because only a linear gradient's angle is placed exactly.`
+    })
+  }
+  return {
+    type,
+    visible,
+    opacity: 1,
+    color: { ...BLACK },
+    gradientStops: (item.colors ?? []).map((stop) => ({
+      color: parseFillColor(stop.color, ctx),
+      position: stop.position
+    })),
+    gradientTransform:
+      type === 'GRADIENT_LINEAR'
+        ? gradientTransformFor(item.rotation ?? 180)
+        : { ...DEFAULT_GRADIENT_TRANSFORM }
+  }
+}
+
 export function convertFill(
   fill: PenFill | undefined,
   ctx: VarContext,
@@ -191,6 +285,10 @@ export function convertFill(
     const visible = typeof item === 'string' ? true : item.enabled !== false
     if (typeof item !== 'string' && item.type === 'image') {
       return convertImageFill(item, visible, sink)
+    }
+    if (typeof item !== 'string' && item.type === 'gradient') {
+      const gradient = convertGradientFill(item, visible, ctx, sink)
+      if (gradient) return gradient
     }
     if (typeof item !== 'string' && !SOLID_FILL_TYPES.has(item.type)) {
       sink?.report({
