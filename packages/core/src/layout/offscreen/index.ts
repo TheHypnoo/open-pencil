@@ -44,6 +44,8 @@ export interface OffscreenLayoutRequest {
 export type OffscreenLayoutResponse =
   | { type: 'geometry'; geometry: OffscreenLayoutGeometry; durationMs: number }
   | { type: 'error'; message: string }
+  /** Progress from inside the worker, so a run that never answers says where it stopped. */
+  | { type: 'stage'; stage: string }
 
 /** Every node as plain data. A worker rebuilds the document from this. */
 export function snapshotOffscreenLayout(graph: SceneGraph): OffscreenLayoutNode[] {

@@ -41,8 +41,15 @@ export function createOffscreenLayoutRunner(): OffscreenLayoutRunner {
     let failure = ''
     const response = await new Promise<OffscreenLayoutResponse>((resolve, reject) => {
       setTimeout(() => reject(new Error('the layout worker timed out')), LAYOUT_WORKER_TIMEOUT_MS)
-      channel.port1.onmessage = (event: MessageEvent<OffscreenLayoutResponse>) =>
-        resolve(event.data)
+      channel.port1.onmessage = (event: MessageEvent<OffscreenLayoutResponse>) => {
+        const message = event.data
+        // Progress from inside the worker: logged, never treated as an answer.
+        if (message.type === 'stage') {
+          console.warn(`[layout] worker: ${message.stage}`)
+          return
+        }
+        resolve(message)
+      }
       running.onerror = (event: ErrorEvent) =>
         reject(new Error(event.message || 'the layout worker failed'))
       running.postMessage(request, [channel.port2])
