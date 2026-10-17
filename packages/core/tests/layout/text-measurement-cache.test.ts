@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
+import { computeAllLayouts } from '@open-pencil/core/layout'
 import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 
 import {
@@ -21,97 +22,102 @@ function textNode(graph: SceneGraph, overrides: Partial<SceneNode> = {}): SceneN
   })
 }
 
-/** Counts how often the measurer actually runs, which is what the cache exists to reduce. */
-function countingMeasurer() {
+/** Runs `body` with a fresh cache and a measurer that counts how often it actually runs. */
+function withCountingMeasurer<T>(body: (calls: () => number) => T): T {
   const counts = { calls: 0 }
   const restore = installTextMeasurer(() => {
     counts.calls += 1
     return { width: 10, height: 10 }
   })
-  return { counts, restore }
+  clearTextMeasurements()
+  try {
+    return body(() => counts.calls)
+  } finally {
+    restore()
+  }
+}
+
+/** A vertical frame whose text layers the layout has to shape, as an instance's clones are. */
+function frameWithTextLayers(count: number): SceneGraph {
+  const graph = new SceneGraph()
+  const page = graph.getPages()[0]
+  const frame = graph.createNode('FRAME', page.id, {
+    layoutMode: 'VERTICAL',
+    primaryAxisSizing: 'FIXED',
+    counterAxisSizing: 'FIXED',
+    width: 200,
+    height: 200
+  })
+  for (let index = 0; index < count; index += 1) {
+    graph.createNode('TEXT', frame.id, {
+      text: 'Ver ficha',
+      fontSize: 14,
+      width: 100,
+      height: 20,
+      // Without a resize mode the layout keeps the stored box and never shapes the text.
+      textAutoResize: 'WIDTH_AND_HEIGHT'
+    })
+  }
+  return graph
 }
 
 describe('the text measurement cache', () => {
   test('measures identical text once, however many nodes carry it', () => {
     const graph = new SceneGraph()
-    const first = textNode(graph)
-    const clone = textNode(graph)
-    const { counts, restore } = countingMeasurer()
-    clearTextMeasurements()
-    try {
-      measureTextForLayout(first)
-      measureTextForLayout(clone)
+    withCountingMeasurer((calls) => {
+      measureTextForLayout(textNode(graph))
+      measureTextForLayout(textNode(graph))
 
-      expect(counts.calls).toBe(1)
-    } finally {
-      restore()
-    }
+      expect(calls()).toBe(1)
+    })
   })
 
   test('measures again when the text differs', () => {
     const graph = new SceneGraph()
-    const { counts, restore } = countingMeasurer()
-    clearTextMeasurements()
-    try {
+    withCountingMeasurer((calls) => {
       measureTextForLayout(textNode(graph))
       measureTextForLayout(textNode(graph, { text: 'Otra etiqueta' }))
 
-      expect(counts.calls).toBe(2)
-    } finally {
-      restore()
-    }
+      expect(calls()).toBe(2)
+    })
   })
 
   test('measures again when the box differs, because the paragraph is laid out at its width', () => {
     const graph = new SceneGraph()
-    const { counts, restore } = countingMeasurer()
-    clearTextMeasurements()
-    try {
+    withCountingMeasurer((calls) => {
       measureTextForLayout(textNode(graph))
       measureTextForLayout(textNode(graph, { width: 240 }))
 
-      expect(counts.calls).toBe(2)
-    } finally {
-      restore()
-    }
+      expect(calls()).toBe(2)
+    })
   })
 
   test('measures again when the constraint differs', () => {
     const graph = new SceneGraph()
-    const { counts, restore } = countingMeasurer()
-    clearTextMeasurements()
-    try {
+    withCountingMeasurer((calls) => {
       const node = textNode(graph)
       measureTextForLayout(node, 80)
       measureTextForLayout(node, 120)
 
-      expect(counts.calls).toBe(2)
-    } finally {
-      restore()
-    }
+      expect(calls()).toBe(2)
+    })
   })
 
   test('measures again when the fonts change, since every cached size is stale', () => {
     const graph = new SceneGraph()
-    const { counts, restore } = countingMeasurer()
-    clearTextMeasurements()
-    try {
+    withCountingMeasurer((calls) => {
       const node = textNode(graph)
       measureTextForLayout(node)
       clearTextMeasurements()
       measureTextForLayout(node)
 
-      expect(counts.calls).toBe(2)
-    } finally {
-      restore()
-    }
+      expect(calls()).toBe(2)
+    })
   })
 
   test('measures again when a run of the text carries its own style', () => {
     const graph = new SceneGraph()
-    const { counts, restore } = countingMeasurer()
-    clearTextMeasurements()
-    try {
+    withCountingMeasurer((calls) => {
       measureTextForLayout(textNode(graph))
       measureTextForLayout(
         textNode(graph, {
@@ -120,27 +126,21 @@ describe('the text measurement cache', () => {
       )
 
       // Shaped bold text is a different shape, so a plain run's size cannot answer for it.
-      expect(counts.calls).toBe(2)
-    } finally {
-      restore()
-    }
+      expect(calls()).toBe(2)
+    })
   })
 
   test('measures again when a paragraph setting differs, because spacing changes the height', () => {
     const graph = new SceneGraph()
-    const { counts, restore } = countingMeasurer()
-    clearTextMeasurements()
-    try {
+    withCountingMeasurer((calls) => {
       measureTextForLayout(textNode(graph))
       measureTextForLayout(textNode(graph, { paragraphSpacing: 8 }))
 
-      expect(counts.calls).toBe(2)
-    } finally {
-      restore()
-    }
+      expect(calls()).toBe(2)
+    })
   })
 
-  test('answers a temporary measurer with its own sizes, never the installed one\u2019s', () => {
+  test('answers a temporary measurer with its own sizes, never the installed one’s', () => {
     const graph = new SceneGraph()
     const node = textNode(graph)
     const restore = installTextMeasurer(() => ({ width: 10, height: 10 }))
@@ -161,7 +161,7 @@ describe('the text measurement cache', () => {
     }
   })
 
-  test('keeps each temporary measurer\u2019s sizes out of the next one\u2019s way', () => {
+  test('keeps each temporary measurer’s sizes out of the next one’s way', () => {
     const graph = new SceneGraph()
     const node = textNode(graph)
     clearTextMeasurements()
@@ -184,5 +184,17 @@ describe('the text measurement cache', () => {
     const size = measureTextForLayout(textNode(graph))
 
     expect(size.height).toBeGreaterThan(0)
+  })
+})
+
+describe('laying out a frame of repeated text', () => {
+  test('shapes each distinct text once, however many layers carry it', () => {
+    const measurements = (count: number) =>
+      withCountingMeasurer((calls) => {
+        computeAllLayouts(frameWithTextLayers(count))
+        return calls()
+      })
+
+    expect([measurements(1), measurements(2)]).toEqual([1, 1])
   })
 })

@@ -13,11 +13,7 @@ let globalTextMeasurer: TextMeasurer | null = null
 
 const GLYPH_WIDTH_FACTOR = 0.6
 
-/**
- * Measurements repeat heavily: instance clones reuse the same text, style and constraint, so a
- * document measured eighty thousand times may hold only a couple of thousand distinct shapes.
- * Caching them by what they depend on is what keeps a large layout from blocking the window.
- */
+/** Entries kept per measurer before the cache starts over. */
 const MEASUREMENT_CACHE_LIMIT = 20_000
 
 interface MeasurementCache {
