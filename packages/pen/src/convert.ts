@@ -116,6 +116,9 @@ export interface PenNode {
   descendants?: Record<string, Partial<PenNode>>
   slot?: string[]
   geometry?: string
+  /** The glyph an `icon` node names, and the library it comes from. */
+  icon?: string
+  library?: string
   iconFontName?: string
   iconFontFamily?: string
   weight?: number
@@ -416,6 +419,9 @@ export function mapNodeType(pen: PenNode, sink?: PenDiagnosticsSink): NodeType {
   if (pen.type === 'text' || pen.type === 'icon_font') return 'TEXT'
   if (pen.type === 'path') return 'VECTOR'
   if (pen.type === 'ref') return 'INSTANCE'
+  // An icon names a glyph in a library. Until that library is resolved the node keeps its box and
+  // fill, and carries the reference in its plugin data.
+  if (pen.type === 'icon') return 'FRAME'
   sink?.report({
     code: 'unsupported-node-type',
     severity: 'degraded',

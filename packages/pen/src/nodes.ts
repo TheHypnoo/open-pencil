@@ -3,6 +3,7 @@ import type {
   AxisSizingMode,
   LayoutMode,
   LayoutSizing,
+  PluginDataEntry,
   SceneGraph,
   SceneNode,
   TextAutoResize,
@@ -65,8 +66,25 @@ function resolveFontFamily(raw: string | undefined, ctx: VarContext): string {
   return raw
 }
 
+/** The plugin id this importer writes, so a reference it cannot model survives in the document. */
+const PEN_PLUGIN_ID = 'openpencil.pen'
+
+/**
+ * The plugin data a `.pen` node needs to keep what the graph cannot model yet. An icon names a
+ * glyph in a library such as Lucide; until that library is resolved, the reference is the only
+ * part of it worth preserving.
+ */
+function penPluginData(pen: PenNode): PluginDataEntry[] | undefined {
+  if (pen.type !== 'icon' || pen.icon === undefined) return undefined
+  const entries: PluginDataEntry[] = [{ pluginId: PEN_PLUGIN_ID, key: 'icon', value: pen.icon }]
+  if (pen.library !== undefined) {
+    entries.push({ pluginId: PEN_PLUGIN_ID, key: 'library', value: pen.library })
+  }
+  return entries
+}
+
 function buildBaseOverrides(pen: PenNode): Partial<SceneNode> {
-  return {
+  const overrides: Partial<SceneNode> = {
     id: pen.id,
     name: pen.name ?? (pen.type === 'icon_font' ? (pen.iconFontName ?? 'Icon') : pen.type),
     x: pen.x ?? 0,
@@ -80,6 +98,9 @@ function buildBaseOverrides(pen: PenNode): Partial<SceneNode> {
     layoutPositioning: pen.layoutPosition === 'absolute' ? 'ABSOLUTE' : 'AUTO',
     boundVariables: {}
   }
+  const pluginData = penPluginData(pen)
+  if (pluginData) overrides.pluginData = pluginData
+  return overrides
 }
 
 function applyAutoLayout(
