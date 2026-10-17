@@ -1,5 +1,5 @@
 import type { IORegistry } from '@open-pencil/core/io'
-import { collectPenAssetUrls } from '@open-pencil/pen'
+import { collectPenAssetUrls, isDocumentAssetName } from '@open-pencil/pen'
 
 import { isTauri } from '@/app/tauri/env'
 
@@ -75,11 +75,22 @@ export async function readBoundedBody(
 }
 
 async function readLocal(url: string, folder: string): Promise<Uint8Array | undefined> {
-  const [{ join }, { readFile }] = await Promise.all([
+  if (!isDocumentAssetName(url)) {
+    console.warn(`[pen] Skipping the image "${url}": it is not a file in the document's folder`)
+    return undefined
+  }
+  const [{ join }, { readFile, stat }] = await Promise.all([
     import('@tauri-apps/api/path'),
     import('@tauri-apps/plugin-fs')
   ])
-  return readFile(await join(folder, url))
+  const path = await join(folder, url)
+  // A file on disk is bounded like a download, so one huge asset cannot fill memory either.
+  const { size } = await stat(path)
+  if (size > MAX_IMAGE_BYTES) {
+    console.warn(`[pen] Skipping the image "${url}": it is larger than ${MAX_IMAGE_BYTES} bytes`)
+    return undefined
+  }
+  return readFile(path)
 }
 
 /**
@@ -136,7 +147,7 @@ async function readAssets(
   return (url) => assets.get(url)
 }
 
-/** The folder that holds the document, which is where its relative assets live. */
+/** The folder a document's own relative assets resolve from. */
 async function documentFolder(filePath: string): Promise<string | undefined> {
   if (!isTauri()) return undefined
   const { dirname } = await import('@tauri-apps/api/path')

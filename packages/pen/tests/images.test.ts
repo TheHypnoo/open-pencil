@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 
-import { collectPenAssetUrls, parsePenFile, type PenNode } from '@open-pencil/pen'
+import {
+  collectPenAssetUrls,
+  isDocumentAssetName,
+  parsePenFile,
+  type PenNode
+} from '@open-pencil/pen'
 import { computeImageHash, type SceneGraph } from '@open-pencil/scene-graph'
 
 function at<T>(value: T | undefined): T {
@@ -217,5 +222,20 @@ describe('the url an image fill came from', () => {
     const [fill] = hero(pen([{ ...HERO, fill: { type: 'image', mode: 'fit' } }])).fills
 
     expect(at(fill).imageURL).toBeUndefined()
+  })
+})
+
+describe('an asset name a document declares', () => {
+  test('is one that stays in the document folder', () => {
+    expect(isDocumentAssetName('assets/hero.png')).toBe(true)
+    expect(isDocumentAssetName('hero.png')).toBe(true)
+  })
+
+  test('is not one that points elsewhere on the machine', () => {
+    expect(isDocumentAssetName('../secrets.png')).toBe(false)
+    expect(isDocumentAssetName('assets/../../secrets.png')).toBe(false)
+    expect(isDocumentAssetName('/etc/passwd')).toBe(false)
+    expect(isDocumentAssetName('https://cdn.example.com/hero.png')).toBe(false)
+    expect(isDocumentAssetName('')).toBe(false)
   })
 })

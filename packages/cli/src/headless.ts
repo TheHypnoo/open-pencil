@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync, statSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 
@@ -7,6 +7,7 @@ import { BUILTIN_IO_FORMATS, IORegistry, initCanvasKit } from '@open-pencil/core
 import { populateAllFigPages, populateFigPage } from '@open-pencil/core/io/formats/fig'
 import { headlessHTMLReader } from '@open-pencil/core/io/formats/html/import'
 import { computeAllLayouts, installTextMeasurer } from '@open-pencil/core/layout'
+import { isDocumentAssetName } from '@open-pencil/pen'
 import type { SceneGraph } from '@open-pencil/scene-graph'
 
 import { printError } from '#cli/format'
@@ -18,16 +19,23 @@ export const CLI_IO_FORMATS = [...BUILTIN_IO_FORMATS, headlessHTMLReader]
 
 const io = new IORegistry(CLI_IO_FORMATS)
 
+/** Bounds one asset, so a document cannot load an arbitrarily large file into memory. */
+const MAX_ASSET_BYTES = 32 * 1024 * 1024
+
 /**
  * Reads an asset a document references relative to itself. A `.pen` document names its images
- * that way, so opening one from disk is the only way its fills get pixels. An asset that exists
- * but cannot be read is reported and left out: one unreadable image must not fail the document.
+ * that way, so opening one from disk is the only way its fills get pixels. A name that leaves the
+ * document's folder is not an asset and is skipped, as is one that is not a regular file or is
+ * larger than the bound; an asset that cannot be read is reported and left out, because one
+ * unreadable image must not fail the document.
  */
 function documentAssetResolver(filePath: string): (assetPath: string) => Uint8Array | undefined {
   const base = dirname(resolve(filePath))
   return (assetPath) => {
+    if (!isDocumentAssetName(assetPath)) return undefined
     const path = resolve(base, assetPath)
-    if (!existsSync(path)) return undefined
+    const info = statSync(path, { throwIfNoEntry: false })
+    if (!info?.isFile() || info.size > MAX_ASSET_BYTES) return undefined
     try {
       return new Uint8Array(readFileSync(path))
     } catch (error) {

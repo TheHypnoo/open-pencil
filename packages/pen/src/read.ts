@@ -383,6 +383,17 @@ export function parsePenFile(json: string, options: PenImportOptions = {}): Scen
 }
 
 /**
+ * Whether a `.pen` asset reference names a file in the document's own folder. A document names its
+ * assets relative to itself, so an absolute path, a scheme or a `..` segment points somewhere else
+ * on the machine and is not an asset.
+ */
+export function isDocumentAssetName(url: string): boolean {
+  if (url === '' || /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(url)) return false
+  if (url.startsWith('/') || url.startsWith('\\')) return false
+  return !url.split(/[\\/]/).includes('..')
+}
+
+/**
  * The asset urls a `.pen` document references, in document order and without repeats. A caller
  * that can only read them asynchronously needs the list before parsing, because
  * {@link PenImportOptions.resolveAsset} answers synchronously.
