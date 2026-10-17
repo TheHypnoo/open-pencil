@@ -1,4 +1,4 @@
-export { parsePenDocument, parsePenFile, readPenFile } from './read'
+export { collectPenAssetUrls, parsePenDocument, parsePenFile, readPenFile } from './read'
 export type { PenImportOptions, PenImportResult } from './read'
 export * from './convert'
 export * from './diagnostics'

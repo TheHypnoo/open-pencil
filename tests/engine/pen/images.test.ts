@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import { parsePenDocument, type PenNode } from '@open-pencil/pen'
+import { collectPenAssetUrls, parsePenDocument, type PenNode } from '@open-pencil/pen'
 import { computeImageHash } from '@open-pencil/scene-graph'
 
 function at<T>(value: T | undefined): T {
@@ -105,5 +105,32 @@ describe('a fill type with no equivalent', () => {
     ])
 
     expect(parsePenDocument(json).diagnostics.map((d) => d.code)).toEqual(['unsupported-fill'])
+  })
+})
+
+describe('collecting the asset urls a document references', () => {
+  test('lists each referenced asset once, in document order', () => {
+    const json = pen([
+      HERO,
+      {
+        type: 'frame',
+        id: 'f2',
+        name: 'Second',
+        width: 10,
+        height: 10,
+        fill: { type: 'image', url: 'assets/second.png', mode: 'fill' }
+      },
+      { ...HERO, id: 'f3', name: 'Hero again' }
+    ])
+
+    expect(collectPenAssetUrls(json)).toEqual(['assets/hero.png', 'assets/second.png'])
+  })
+
+  test('ignores fills that reference no asset', () => {
+    const json = pen([
+      { type: 'frame', id: 's1', name: 'Plain', width: 10, height: 10, fill: '#ff0000' }
+    ])
+
+    expect(collectPenAssetUrls(json)).toEqual([])
   })
 })

@@ -375,8 +375,7 @@ export interface PenImportOptions {
 /**
  * Names an image asset's bytes by their content, once per url, and keeps them in the graph. A
  * document can point many fills at one asset, so each one is read once.
- */
-function imageResolver(
+ */ function imageResolver(
   graph: SceneGraph,
   resolveAsset?: (url: string) => Uint8Array | undefined
 ): (url: string) => string | undefined {
@@ -447,6 +446,28 @@ export function parsePenDocument(json: string, options: PenImportOptions = {}): 
 /** Parses a `.pen` document into a graph, discarding the import diagnostics. */
 export function parsePenFile(json: string, options?: PenImportOptions): SceneGraph {
   return parsePenDocument(json, options).graph
+}
+
+/**
+ * The asset urls a `.pen` document references, in document order and without repeats. A caller
+ * that can only read them asynchronously needs the list before parsing, because
+ * {@link PenImportOptions.resolveAsset} answers synchronously.
+ */
+export function collectPenAssetUrls(json: string): string[] {
+  const doc: PenDocument = JSON.parse(json)
+  const urls = new Set<string>()
+  const collect = (pen: PenNode) => {
+    if (pen.fill !== undefined) {
+      for (const fill of Array.isArray(pen.fill) ? pen.fill : [pen.fill]) {
+        if (typeof fill !== 'string' && fill.type === 'image' && fill.url !== undefined) {
+          urls.add(fill.url)
+        }
+      }
+    }
+    for (const child of pen.children ?? []) collect(child)
+  }
+  for (const child of doc.children) collect(child)
+  return [...urls]
 }
 
 export async function readPenFile(file: File, options?: PenImportOptions): Promise<SceneGraph> {
