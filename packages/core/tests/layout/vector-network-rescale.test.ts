@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test } from 'bun:test'
 
 import { SkiaRenderer } from '@open-pencil/core'
 import { initCanvasKit, renderNodesToImage } from '@open-pencil/core/io'
+import { rescaleVectorNetworkForLayout } from '#core/layout/apply'
 import { computeAllLayouts } from '@open-pencil/core/layout'
 import {
   fillSizingFields,
@@ -171,6 +172,48 @@ function alphaAt(graph: SceneGraph, tileId: string, tileSize: number, x: number,
     image.delete()
   }
 }
+
+/** A column that starts with no width, which is the state a collapse leaves behind. */
+function collapsedColumn(): SceneGraph {
+  const graph = new SceneGraph()
+  const page = graph.getPages()[0].id
+  const frame = graph.createNode('FRAME', page, {
+    layoutMode: 'VERTICAL',
+    primaryAxisSizing: 'FIXED',
+    counterAxisSizing: 'FIXED',
+    width: 0,
+    height: 64
+  })
+  graph.createNode('VECTOR', frame.id, {
+    width: 64,
+    height: 64,
+    vectorNetwork: square(64),
+    ...fillSizingFields('VERTICAL', 'HORIZONTAL')
+  })
+  return graph
+}
+
+describe('a path whose box the layout collapses', () => {
+  test('keeps its geometry instead of flattening it into a zero box', () => {
+    const graph = collapsedColumn()
+    computeAllLayouts(graph)
+    const vector = vectorOf(graph)
+
+    expect(Math.round(vector.width)).toBe(0)
+    expect(geometryBox(at(vector.vectorNetwork ?? undefined))).toEqual({ width: 64, height: 64 })
+  })
+
+  test('rescales the geometry it kept once the box has a size again', () => {
+    // The rule the layout write calls, from the state a collapse leaves: no box, geometry intact.
+    const restored = at(rescaleVectorNetworkForLayout(square(64), 0, 0, 16, 64))
+
+    expect(geometryBox(restored)).toEqual({ width: 16, height: 64 })
+  })
+
+  test('leaves the geometry alone while the target box has no size', () => {
+    expect(rescaleVectorNetworkForLayout(square(64), 64, 64, 0, 64)).toBeNull()
+  })
+})
 
 describe('a path the layout resized, on screen', () => {
   test('draws inside the box the layout gave it', () => {

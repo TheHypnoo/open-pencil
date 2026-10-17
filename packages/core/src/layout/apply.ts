@@ -1,6 +1,11 @@
 import type { Node as YogaNode } from 'yoga-layout'
 
-import { enforcedAspectRatio, type SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
+import {
+  enforcedAspectRatio,
+  type SceneGraph,
+  type SceneNode,
+  type VectorNetwork
+} from '@open-pencil/scene-graph'
 import {
   layoutConstrainedChildRect,
   scaleVectorNetworkForResize
@@ -9,6 +14,40 @@ import {
 import { keepsSavedLayout, usesDetachedDerivedLayout } from './derived'
 
 export type ComputeLayoutFn = (graph: SceneGraph, frameId: string) => void
+
+/** The extent a network's vertices span, which a collapsed box no longer records. */
+function networkExtent(network: VectorNetwork | null): { width: number; height: number } | null {
+  if (!network || network.vertices.length === 0) return null
+  const xs = network.vertices.map((vertex) => vertex.x)
+  const ys = network.vertices.map((vertex) => vertex.y)
+  const width = Math.max(...xs) - Math.min(...xs)
+  const height = Math.max(...ys) - Math.min(...ys)
+  return width > 0 && height > 0 ? { width, height } : null
+}
+
+/**
+ * The geometry a path keeps when the layout changes its size.
+ *
+ * A path's geometry is baked at the size it was drawn, so a size the layout gives it has to rescale
+ * that geometry too. Two cases have no usable source box: a target with no size, where scaling into
+ * it would flatten every vertex so the shape could never come back, and a box that is already zero,
+ * where the extent the geometry still spans is the only size it knows.
+ */
+export function rescaleVectorNetworkForLayout(
+  network: VectorNetwork | null,
+  fromWidth: number,
+  fromHeight: number,
+  toWidth: number,
+  toHeight: number
+): VectorNetwork | null {
+  if (toWidth <= 0 || toHeight <= 0) return null
+  if (fromWidth > 0 && fromHeight > 0) {
+    return scaleVectorNetworkForResize(network, fromWidth, fromHeight, toWidth, toHeight)
+  }
+  const extent = networkExtent(network)
+  if (!extent) return null
+  return scaleVectorNetworkForResize(network, extent.width, extent.height, toWidth, toHeight)
+}
 
 function preservesImportedHugCrossSize(
   graph: SceneGraph,
@@ -53,7 +92,7 @@ function writeLayoutGeometry(
   // rescale that geometry too. Without this a path keeps its old extent and draws outside the box,
   // which is what an instance smaller than its component turns into.
   if (node.type === 'VECTOR') {
-    const network = scaleVectorNetworkForResize(
+    const network = rescaleVectorNetworkForLayout(
       node.vectorNetwork,
       node.width,
       node.height,
