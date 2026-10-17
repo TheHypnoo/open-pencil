@@ -2,7 +2,7 @@ import type { SceneNode } from '@open-pencil/scene-graph'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { computeAllLayouts } from '#core/layout'
-import { installTextMeasurer, type TextMeasurer } from './text-measurement'
+import { installTextMeasurer, type TextMeasurer } from '#core/layout/text-measurement'
 import { fontManager } from '#core/text'
 
 /**
@@ -56,7 +56,9 @@ export function snapshotOffscreenLayout(graph: SceneGraph): OffscreenLayoutNode[
 }
 
 /** The bytes of the faces a layout needs, for the side that has them loaded. */
-export function snapshotOffscreenFonts(keys: ReadonlyArray<[string, string]>): OffscreenLayoutFont[] {
+export function snapshotOffscreenFonts(
+  keys: ReadonlyArray<[string, string]>
+): OffscreenLayoutFont[] {
   const fonts: OffscreenLayoutFont[] = []
   for (const [family, style] of keys) {
     const data = fontManager.loadedData(family, style)
@@ -120,15 +122,36 @@ export function readOffscreenGeometry(graph: SceneGraph): OffscreenLayoutGeometr
  * Applies geometry a layout run produced elsewhere. It arrives as derived layout, so constraints
  * are not re-applied over values the run already accounted for.
  */
-export function applyOffscreenGeometry(
-  graph: SceneGraph,
-  geometry: OffscreenLayoutGeometry
-): void {
+export function applyOffscreenGeometry(graph: SceneGraph, geometry: OffscreenLayoutGeometry): void {
   graph.applyDerivedLayoutDuring(() => {
     for (const [id, fields] of geometry) {
       if (graph.getNode(id)) graph.updateNode(id, fields)
     }
   })
+}
+
+/**
+ * Lays a document out somewhere else and reports what every node measures, or answers null when
+ * it cannot. The caller falls back to laying it out where the document lives.
+ */
+export type OffscreenLayoutRunner = (
+  graph: SceneGraph,
+  scopeId: string | null
+) => Promise<OffscreenLayoutGeometry | null>
+
+let offscreenLayoutRunner: OffscreenLayoutRunner | null = null
+
+/** Installs the runner a layout run should prefer, returning the previous one. */
+export function installOffscreenLayoutRunner(
+  runner: OffscreenLayoutRunner | null
+): OffscreenLayoutRunner | null {
+  const previous = offscreenLayoutRunner
+  offscreenLayoutRunner = runner
+  return previous
+}
+
+export function getOffscreenLayoutRunner(): OffscreenLayoutRunner | null {
+  return offscreenLayoutRunner
 }
 
 /**
@@ -145,9 +168,7 @@ export function layoutOffscreen(
     const restoreMeasurer = installTextMeasurer(measurer)
     try {
       const started = performance.now()
-      graph.applyDerivedLayoutDuring(() =>
-        computeAllLayouts(graph, request.scopeId ?? undefined)
-      )
+      graph.applyDerivedLayoutDuring(() => computeAllLayouts(graph, request.scopeId ?? undefined))
       return {
         type: 'geometry',
         geometry: readOffscreenGeometry(graph),

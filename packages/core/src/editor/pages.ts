@@ -14,6 +14,7 @@ import {
 } from '#core/kiwi/fig/population/client'
 import { isReaderPagePending, recoverReaderPage } from '#core/kiwi/fig/session/document-state'
 import { computeAllLayouts } from '#core/layout'
+import { applyOffscreenGeometry, getOffscreenLayoutRunner } from '#core/layout/offscreen'
 import { fontManager } from '#core/text/fonts'
 import { collectGraphFontRequirements } from '#core/text/requirements'
 import { missingGraphFontScripts } from '#core/text/resolved-requirements'
@@ -225,7 +226,12 @@ export function createPageActions(ctx: EditorContext, drawing?: PageDrawing) {
     if (generation !== pageSwitchGeneration) return null
     if (ctx.getRenderer() || populated) {
       options.onProgress?.({ phase: 'layout', detail: page.name })
-      ctx.graph.applyDerivedLayoutDuring(() => computeAllLayouts(ctx.graph, pageId))
+      // A document large enough to block the window is laid out elsewhere; anything less stays
+      // here, and a runner that cannot answer falls back to the same run in this thread.
+      const offscreen = getOffscreenLayoutRunner()
+      const geometry = offscreen ? await offscreen(ctx.graph, pageId) : null
+      if (geometry) applyOffscreenGeometry(ctx.graph, geometry)
+      else ctx.graph.applyDerivedLayoutDuring(() => computeAllLayouts(ctx.graph, pageId))
     }
     throwIfAborted(options.signal)
     if (generation !== pageSwitchGeneration) return null

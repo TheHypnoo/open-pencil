@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 
 import { computeAllLayouts } from '@open-pencil/core/layout'
-import { installTextMeasurer } from '#core/layout/text-measurement'
+import { SceneGraph } from '@open-pencil/scene-graph'
+
 import {
   applyOffscreenGeometry,
   layoutOffscreen,
@@ -10,7 +11,7 @@ import {
   snapshotOffscreenLayout,
   type OffscreenLayoutGeometry
 } from '#core/layout/offscreen'
-import { SceneGraph } from '@open-pencil/scene-graph'
+import { installTextMeasurer } from '#core/layout/text-measurement'
 
 /** Sizes a text by its content, so a layout run is deterministic and testable without CanvasKit. */
 const stubMeasurer = (node: { text?: string; fontSize?: number }) => ({
@@ -120,7 +121,11 @@ describe('laying out a snapshot outside the live graph', () => {
 
   test('reports a failure instead of throwing across the boundary', () => {
     const result = layoutOffscreen(
-      { nodes: [{ id: 'ghost', type: 'TEXT', parentId: 'missing', props: {} }], fonts: [], scopeId: null },
+      {
+        nodes: [{ id: 'ghost', type: 'TEXT', parentId: 'missing', props: {} }],
+        fonts: [],
+        scopeId: null
+      },
       stubMeasurer
     )
 

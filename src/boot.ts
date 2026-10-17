@@ -1,6 +1,8 @@
 import { createHead } from '@unhead/vue/client'
 import { createApp, nextTick } from 'vue'
 
+import { installOffscreenLayoutRunner } from '@open-pencil/core/layout/offscreen'
+import { createOffscreenLayoutRunner } from '@open-pencil/core/layout/offscreen/worker'
 import { createRetainedScopePlugin } from '@open-pencil/vue'
 
 import './app.css'
@@ -22,6 +24,8 @@ import router from './router'
 export async function boot(): Promise<void> {
   installBundledFonts()
   preloadFonts()
+  // A document large enough to block the window is laid out in a worker; smaller ones stay here.
+  installOffscreenLayoutRunner(createOffscreenLayoutRunner())
   const head = createHead()
   const app = createApp(App)
   const bootErrors = observeBootErrors(app)
