@@ -1,149 +1,23 @@
-import { fillSizingFields, SceneGraph } from '@open-pencil/scene-graph'
-import type {
-  AxisSizingMode,
-  LayoutMode,
-  LayoutSizing,
-  SceneNode,
-  VectorNetwork
-} from '@open-pencil/scene-graph'
+import { SceneGraph, type SceneNode } from '@open-pencil/scene-graph'
 import { copyEffects, copyFills, copyStrokes } from '@open-pencil/scene-graph/copy'
 import { populateInstanceChildren } from '@open-pencil/scene-graph/instances'
-import { parseSVGPath } from '@open-pencil/scene-graph/parse-path'
 
 import {
   applyCornerRadius,
-  applyPadding,
-  bindIfVar,
-  buildVarContext,
   convertEffects,
   convertFill,
   convertStroke,
-  isVarRef,
-  mapAlignItems,
-  mapFontWeight,
-  mapJustifyContent,
-  mapLayoutMode,
-  mapNodeType,
-  mapTextAlign,
-  mapTextAlignVertical,
   parseSize,
   type PenDocument,
-  type PenNode,
-  type VarContext
+  type PenNode
 } from './convert'
-
-function scaleVectorNetwork(vn: VectorNetwork, targetW: number, targetH: number): void {
-  if (vn.vertices.length === 0) return
-  let minX = Infinity
-  let maxX = -Infinity
-  let minY = Infinity
-  let maxY = -Infinity
-  for (const v of vn.vertices) {
-    minX = Math.min(minX, v.x)
-    maxX = Math.max(maxX, v.x)
-    minY = Math.min(minY, v.y)
-    maxY = Math.max(maxY, v.y)
-  }
-  const vnW = maxX - minX
-  const vnH = maxY - minY
-  if (vnW < 0.01 || vnH < 0.01) return
-  const sx = targetW / vnW
-  const sy = targetH / vnH
-  if (Math.abs(sx - 1) < 0.01 && Math.abs(sy - 1) < 0.01) return
-  for (const v of vn.vertices) {
-    v.x = (v.x - minX) * sx
-    v.y = (v.y - minY) * sy
-  }
-  for (const s of vn.segments) {
-    s.tangentStart = { x: s.tangentStart.x * sx, y: s.tangentStart.y * sy }
-    s.tangentEnd = { x: s.tangentEnd.x * sx, y: s.tangentEnd.y * sy }
-  }
-}
-
-function resolveFontFamily(raw: string | undefined, ctx: VarContext): string {
-  if (!raw) return 'Inter'
-  if (isVarRef(raw)) return ctx.resolveString(raw)
-  return raw
-}
-
-function buildBaseOverrides(pen: PenNode): Partial<SceneNode> {
-  return {
-    id: pen.id,
-    name: pen.name ?? (pen.type === 'icon_font' ? (pen.iconFontName ?? 'Icon') : pen.type),
-    x: pen.x ?? 0,
-    y: pen.y ?? 0,
-    visible: pen.enabled !== false,
-    opacity: pen.opacity ?? 1,
-    rotation: pen.rotation ?? 0,
-    flipX: pen.flipX ?? false,
-    flipY: pen.flipY ?? false,
-    clipsContent: pen.clip ?? false,
-    boundVariables: {}
-  }
-}
-
-function applyAutoLayout(
-  overrides: Partial<SceneNode>,
-  layoutMode: LayoutMode,
-  pen: PenNode,
-  widthSizing: LayoutSizing,
-  heightSizing: LayoutSizing,
-  ctx?: VarContext
-): void {
-  overrides.layoutMode = layoutMode
-  overrides.primaryAxisAlign = mapJustifyContent(pen.justifyContent)
-  overrides.counterAxisAlign = mapAlignItems(pen.alignItems)
-  overrides.itemSpacing =
-    typeof pen.gap === 'string' && isVarRef(pen.gap) && ctx
-      ? ctx.resolveNumber(pen.gap)
-      : ((pen.gap ?? 0) as number)
-
-  // Fill is the child's grow or stretch, set with its parent; the frame itself stays fixed.
-  const own = (sizing: LayoutSizing): AxisSizingMode => (sizing === 'HUG' ? 'HUG' : 'FIXED')
-  if (layoutMode === 'VERTICAL') {
-    overrides.primaryAxisSizing = own(heightSizing)
-    overrides.counterAxisSizing = own(widthSizing)
-  } else {
-    overrides.primaryAxisSizing = own(widthSizing)
-    overrides.counterAxisSizing = own(heightSizing)
-  }
-}
-
-function applyTextProps(node: SceneNode, pen: PenNode, ctx: VarContext): void {
-  node.text = pen.type === 'icon_font' ? (pen.iconFontName ?? '') : (pen.content ?? '')
-  node.fontFamily =
-    pen.type === 'icon_font'
-      ? (pen.iconFontFamily ?? 'Material Symbols Sharp')
-      : resolveFontFamily(pen.fontFamily, ctx)
-  node.fontSize = pen.fontSize ?? 14
-  node.fontWeight = mapFontWeight(
-    pen.fontWeight ?? (pen.type === 'icon_font' ? pen.weight : undefined)
-  )
-  node.textAlignHorizontal = mapTextAlign(pen.textAlign)
-  node.textAlignVertical = mapTextAlignVertical(pen.textAlignVertical)
-  if (pen.lineHeight !== undefined) {
-    node.lineHeight = pen.lineHeight < 5 ? pen.lineHeight * node.fontSize : pen.lineHeight
-  }
-  if (pen.letterSpacing !== undefined) node.letterSpacing = pen.letterSpacing
-  node.textAutoResize = pen.textGrowth === 'fixed-width' ? 'HEIGHT' : 'WIDTH_AND_HEIGHT'
-  if (pen.fontFamily && isVarRef(pen.fontFamily)) {
-    bindIfVar(node, 'fontFamily', pen.fontFamily, ctx)
-  }
-}
-
-function resolveSizing(pen: PenNode, ctx: VarContext) {
-  const isTextLike = pen.type === 'text' || pen.type === 'icon_font'
-  const defaultSize = isTextLike ? 20 : 100
-  const defaultW = isTextLike && pen.width === undefined ? 0 : defaultSize
-  const w = parseSize(pen.width, defaultW, ctx)
-  const h = parseSize(pen.height, defaultSize, ctx)
-  const layout = mapLayoutMode(pen)
-
-  if (pen.width === undefined && layout !== 'NONE') w.sizing = 'HUG'
-  if (pen.height === undefined && layout !== 'NONE') h.sizing = 'HUG'
-
-  return { w, h, layout, isTextLike }
-}
+import {
+  createPenDiagnosticsCollector,
+  type PenDiagnostic,
+  type PenDiagnosticsCollector
+} from './diagnostics'
+import { createSceneNode } from './nodes'
+import { applyTheme, buildVarContext, type VarContext } from './variables'
 
 function inheritLayoutFromComp(node: SceneNode, pen: PenNode, comp: SceneNode): void {
   const wasRow = node.layoutMode === 'HORIZONTAL'
@@ -174,14 +48,16 @@ function applyRefVisuals(
   node: SceneNode,
   pen: PenNode,
   compPen: PenNode | undefined,
-  ctx: VarContext
+  ctx: VarContext,
+  sink: PenDiagnosticsCollector
 ): void {
   if (!compPen) return
   if (pen.fill === undefined && compPen.fill !== undefined)
-    node.fills = convertFill(compPen.fill, ctx, node)
+    node.fills = convertFill(compPen.fill, ctx, node, sink)
   if (pen.stroke === undefined && compPen.stroke)
-    node.strokes = convertStroke(compPen.stroke, ctx, node)
-  if (pen.effect === undefined && compPen.effect) node.effects = convertEffects(compPen.effect)
+    node.strokes = convertStroke(compPen.stroke, ctx, node, sink)
+  if (pen.effect === undefined && compPen.effect)
+    node.effects = convertEffects(compPen.effect, sink)
   if (pen.cornerRadius === undefined) applyCornerRadius(node, compPen.cornerRadius, ctx)
 }
 
@@ -191,103 +67,51 @@ function applyRefProps(
   graph: SceneGraph,
   componentIds: Map<string, string>,
   penSources: Map<string, PenNode>,
-  ctx: VarContext
+  ctx: VarContext,
+  sink: PenDiagnosticsCollector
 ): void {
   if (!pen.ref) return
   const componentId = componentIds.get(pen.ref) ?? pen.ref
   node.componentId = componentId
   const comp = graph.getNode(componentId)
-  if (!comp) return
+  if (!comp) {
+    sink.report({
+      code: 'unresolved-component',
+      severity: 'degraded',
+      path: '',
+      nodeId: pen.id,
+      nodeName: pen.name,
+      nodeType: pen.type,
+      property: 'ref',
+      value: pen.ref,
+      detail: `Component "${pen.ref}" is not declared in this document, so this instance stays empty.`
+    })
+    return
+  }
   if (pen.width === undefined) node.width = comp.width
   if (pen.height === undefined) node.height = comp.height
   if (pen.layout === undefined) inheritLayoutFromComp(node, pen, comp)
-  applyRefVisuals(node, pen, penSources.get(pen.ref), ctx)
+  applyRefVisuals(node, pen, penSources.get(pen.ref), ctx, sink)
 }
 
 function applyAllRefProps(
-  penNodes: PenNode[],
+  pen: PenNode,
+  path: string,
   graph: SceneGraph,
   componentIds: Map<string, string>,
   penSources: Map<string, PenNode>,
-  ctx: VarContext
+  ctx: VarContext,
+  sink: PenDiagnosticsCollector
 ): void {
-  for (const pen of penNodes) {
+  sink.within(path, () => {
     if (pen.type === 'ref') {
       const node = graph.getNode(pen.id)
-      if (node) applyRefProps(node, pen, graph, componentIds, penSources, ctx)
+      if (node) applyRefProps(node, pen, graph, componentIds, penSources, ctx, sink)
     }
-    if (pen.children) applyAllRefProps(pen.children, graph, componentIds, penSources, ctx)
-  }
-}
-
-function applyTheme(theme: Record<string, string>, ctx: VarContext): void {
-  const themeName = Object.values(theme)[0]
-  if (themeName) ctx.setActiveTheme(themeName)
-}
-
-// eslint-disable-next-line complexity -- .pen node mapping touches many format-specific fields
-function createSceneNode(
-  pen: PenNode,
-  parentId: string,
-  graph: SceneGraph,
-  ctx: VarContext,
-  componentIds: Map<string, string>,
-  penSources: Map<string, PenNode>
-): string | null {
-  if (pen.type === 'prompt') return null
-  if (pen.theme) applyTheme(pen.theme, ctx)
-
-  const { w, h, layout, isTextLike } = resolveSizing(pen, ctx)
-  const overrides = buildBaseOverrides(pen)
-  overrides.width = w.value
-  overrides.height = h.value
-  const hasChildren = (pen.children?.length ?? 0) > 0
-  if (!hasChildren && w.fitContentFallback !== undefined) overrides.minWidth = w.fitContentFallback
-  if (!hasChildren && h.fitContentFallback !== undefined) overrides.minHeight = h.fitContentFallback
-
-  const parentLayout = graph.getNode(parentId)?.layoutMode ?? 'NONE'
-  if (layout !== 'NONE') {
-    const widthSizing =
-      parentLayout === 'NONE' && w.sizing === 'FILL' ? ('FIXED' as LayoutSizing) : w.sizing
-    const heightSizing =
-      parentLayout === 'NONE' && h.sizing === 'FILL' ? ('FIXED' as LayoutSizing) : h.sizing
-    applyAutoLayout(overrides, layout, pen, widthSizing, heightSizing, ctx)
-  }
-
-  const node = graph.createNode(mapNodeType(pen), parentId, overrides)
-
-  if (pen.fill !== undefined) node.fills = convertFill(pen.fill, ctx, node)
-  if (pen.stroke) node.strokes = convertStroke(pen.stroke, ctx, node)
-  node.effects = convertEffects(pen.effect)
-  applyCornerRadius(node, pen.cornerRadius, ctx)
-  applyPadding(node, pen.padding, ctx)
-
-  // Text without a width resizes to its content, which laying out the document measures.
-  if (isTextLike) applyTextProps(node, pen, ctx)
-
-  if (pen.type === 'path' && pen.geometry) {
-    const vectorNetwork = parseSVGPath(pen.geometry)
-    node.vectorNetwork = vectorNetwork
-    scaleVectorNetwork(vectorNetwork, node.width, node.height)
-  }
-
-  if (parentLayout !== 'NONE') {
-    if (w.sizing === 'FILL') Object.assign(node, fillSizingFields(parentLayout, 'HORIZONTAL'))
-    if (h.sizing === 'FILL') Object.assign(node, fillSizingFields(parentLayout, 'VERTICAL'))
-  }
-
-  if (pen.reusable) {
-    componentIds.set(pen.id, node.id)
-    penSources.set(pen.id, pen)
-  }
-
-  if (pen.children) {
-    for (const child of pen.children) {
-      createSceneNode(child, node.id, graph, ctx, componentIds, penSources)
-    }
-  }
-
-  return node.id
+    pen.children?.forEach((child, index) => {
+      applyAllRefProps(child, `children[${index}]`, graph, componentIds, penSources, ctx, sink)
+    })
+  })
 }
 
 function collectByNameType(
@@ -370,53 +194,84 @@ function applyDescendantOverrides(
   pen: PenNode,
   ctx: VarContext,
   componentIds: Map<string, string>,
-  penSources: Map<string, PenNode>
+  penSources: Map<string, PenNode>,
+  sink: PenDiagnosticsCollector
 ): void {
   if (pen.type !== 'ref' || !pen.descendants) return
   const instanceNode = graph.getNode(pen.id)
   if (!instanceNode) return
 
   for (const [origId, overrideData] of Object.entries(pen.descendants)) {
-    const clone =
-      findCloneByComponentId(graph, instanceNode.id, origId) ??
-      findCloneByNameFallback(graph, instanceNode.id, origId)
+    sink.within(`descendants[${origId}]`, () => {
+      const clone =
+        findCloneByComponentId(graph, instanceNode.id, origId) ??
+        findCloneByNameFallback(graph, instanceNode.id, origId)
 
-    if (clone) {
-      if (overrideData.children) {
-        const toDelete = clone.childIds.slice()
-        for (const childId of toDelete) graph.deleteNode(childId)
-        for (const child of overrideData.children) {
-          createSceneNode(child, clone.id, graph, ctx, componentIds, penSources)
+      if (clone) {
+        if (overrideData.children) {
+          const toDelete = clone.childIds.slice()
+          for (const childId of toDelete) graph.deleteNode(childId)
+          overrideData.children.forEach((child, index) => {
+            createSceneNode(
+              child,
+              clone.id,
+              graph,
+              ctx,
+              componentIds,
+              penSources,
+              sink,
+              `children[${index}]`
+            )
+          })
         }
+        applyOverrideProps(clone, overrideData, ctx)
+        return
       }
-      applyOverrideProps(clone, overrideData, ctx)
-      continue
-    }
 
-    if (overrideData.type && overrideData.id) {
-      createSceneNode(
-        overrideData as PenNode,
-        instanceNode.id,
-        graph,
-        ctx,
-        componentIds,
-        penSources
-      )
-    }
+      if (overrideData.type && overrideData.id) {
+        createSceneNode(
+          overrideData as PenNode,
+          instanceNode.id,
+          graph,
+          ctx,
+          componentIds,
+          penSources,
+          sink,
+          ''
+        )
+        return
+      }
+
+      sink.report({
+        code: 'dropped-override',
+        severity: 'dropped',
+        path: '',
+        nodeId: pen.id,
+        nodeName: pen.name,
+        nodeType: pen.type,
+        property: 'descendants',
+        value: origId,
+        detail: `Override "${origId}" matches no descendant of this instance and declares no node of its own, so it was dropped.`
+      })
+    })
   }
 }
 
 function walkAndApplyOverrides(
-  nodes: PenNode[],
+  pen: PenNode,
+  path: string,
   graph: SceneGraph,
   ctx: VarContext,
   componentIds: Map<string, string>,
-  penSources: Map<string, PenNode>
+  penSources: Map<string, PenNode>,
+  sink: PenDiagnosticsCollector
 ): void {
-  for (const pen of nodes) {
-    applyDescendantOverrides(graph, pen, ctx, componentIds, penSources)
-    if (pen.children) walkAndApplyOverrides(pen.children, graph, ctx, componentIds, penSources)
-  }
+  sink.within(path, () => {
+    applyDescendantOverrides(graph, pen, ctx, componentIds, penSources, sink)
+    pen.children?.forEach((child, index) => {
+      walkAndApplyOverrides(child, `children[${index}]`, graph, ctx, componentIds, penSources, sink)
+    })
+  })
 }
 
 function collectComponentIds(nodes: PenNode[], map: Map<string, string>): void {
@@ -446,13 +301,21 @@ function resolveNodeVars(node: SceneNode, graph: SceneGraph, ctx: VarContext): v
   }
 }
 
-function resolveThemeVariables(penNodes: PenNode[], graph: SceneGraph, ctx: VarContext): void {
-  for (const pen of penNodes) {
+function resolveThemeVariables(
+  pen: PenNode,
+  path: string,
+  graph: SceneGraph,
+  ctx: VarContext,
+  sink: PenDiagnosticsCollector
+): void {
+  sink.within(path, () => {
     if (pen.theme) applyTheme(pen.theme, ctx)
     const node = graph.getNode(pen.id)
     if (node) resolveNodeVars(node, graph, ctx)
-    if (pen.children) resolveThemeVariables(pen.children, graph, ctx)
-  }
+    pen.children?.forEach((child, index) => {
+      resolveThemeVariables(child, `children[${index}]`, graph, ctx, sink)
+    })
+  })
 }
 
 function fixInstanceWidths(graph: SceneGraph): void {
@@ -470,7 +333,17 @@ function fixInstanceWidths(graph: SceneGraph): void {
   }
 }
 
-export function parsePenFile(json: string): SceneGraph {
+export interface PenImportResult {
+  graph: SceneGraph
+  /** Every declaration the importer could not represent faithfully, in document order. */
+  diagnostics: PenDiagnostic[]
+}
+
+/**
+ * Parses a `.pen` document and reports what the import could not represent faithfully.
+ * Prefer this over {@link parsePenFile} when the caller can show the losses to a user.
+ */
+export function parsePenDocument(json: string): PenImportResult {
   const doc: PenDocument = JSON.parse(json)
   const graph = new SceneGraph()
 
@@ -478,29 +351,50 @@ export function parsePenFile(json: string): SceneGraph {
     graph.deleteNode(page.id)
   }
 
-  const ctx = buildVarContext(graph, doc.variables ?? {}, doc.themes ?? {})
+  const sink = createPenDiagnosticsCollector()
+  const ctx = buildVarContext(graph, doc.variables ?? {}, doc.themes ?? {}, sink)
   const componentIds = new Map<string, string>()
   const penSources = new Map<string, PenNode>()
 
   collectComponentIds(doc.children, componentIds)
 
   const page = graph.addPage(doc.children[0]?.name ?? 'Page 1')
-  for (const child of doc.children) {
-    createSceneNode(child, page.id, graph, ctx, componentIds, penSources)
-  }
+  doc.children.forEach((child, index) => {
+    createSceneNode(
+      child,
+      page.id,
+      graph,
+      ctx,
+      componentIds,
+      penSources,
+      sink,
+      `children[${index}]`
+    )
+  })
 
-  applyAllRefProps(doc.children, graph, componentIds, penSources, ctx)
+  doc.children.forEach((child, index) => {
+    applyAllRefProps(child, `children[${index}]`, graph, componentIds, penSources, ctx, sink)
+  })
   populateInstances(graph)
-  walkAndApplyOverrides(doc.children, graph, ctx, componentIds, penSources)
+  doc.children.forEach((child, index) => {
+    walkAndApplyOverrides(child, `children[${index}]`, graph, ctx, componentIds, penSources, sink)
+  })
   populateInstances(graph)
-  resolveThemeVariables(doc.children, graph, ctx)
+  doc.children.forEach((child, index) => {
+    resolveThemeVariables(child, `children[${index}]`, graph, ctx, sink)
+  })
   fixInstanceWidths(graph)
 
   if (graph.getPages(true).length === 0) {
     graph.addPage('Page 1')
   }
 
-  return graph
+  return { graph, diagnostics: [...sink.entries] }
+}
+
+/** Parses a `.pen` document into a graph, discarding the import diagnostics. */
+export function parsePenFile(json: string): SceneGraph {
+  return parsePenDocument(json).graph
 }
 
 export async function readPenFile(file: File): Promise<SceneGraph> {
