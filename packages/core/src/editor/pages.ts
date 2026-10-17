@@ -190,7 +190,17 @@ export function createPageActions(ctx: EditorContext, drawing?: PageDrawing) {
       }
     } finally {
       fontManager.unblockNodes(childIds)
-      ctx.getRenderer()?.invalidateAllPictures()
+      const renderer = ctx.getRenderer()
+      if (renderer) {
+        // A font changes how text draws and nothing else, so only the text pictures — and the
+        // pictures that contain them — are stale. Dropping every picture made the next paint
+        // rebuild the whole document, which is what the window froze on while fonts arrived.
+        for (const node of requirements.nodes) {
+          if (node.type === 'TEXT') renderer.invalidateNodePicture(node.id)
+        }
+        renderer.invalidateScenePicture()
+        renderer.tiledScene.invalidateStructure()
+      }
     }
   }
 
