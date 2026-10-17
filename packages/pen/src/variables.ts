@@ -34,7 +34,7 @@ export interface VarContext {
   resolveColor(ref: string): Color
   resolveNumber(ref: string): number
   resolveString(ref: string): string
-  setActiveTheme(themeName: string): void
+  setActiveTheme(themeKey: string, themeName: string): void
 }
 
 function penVarTypeToSceneType(t: string): VariableType {
@@ -74,8 +74,12 @@ export function bindIfVar(node: SceneNode, field: string, val: unknown, ctx: Var
 
 /** Switches the variable context to the theme a `.pen` node declares. */
 export function applyTheme(theme: Record<string, string>, ctx: VarContext): void {
-  const themeName = Object.values(theme)[0]
-  if (themeName) ctx.setActiveTheme(themeName)
+  // A node names one mode per theme axis, and the axis is what the mode was declared under.
+  const entries = Object.entries(theme)
+  if (entries.length > 0) {
+    const [themeKey, themeName] = entries[0]
+    ctx.setActiveTheme(themeKey, themeName)
+  }
 }
 
 export function buildVarContext(
@@ -166,7 +170,10 @@ export function buildVarContext(
 
   return {
     byName,
-    activeModeId,
+    // Reading the mode has to follow what `setActiveTheme` switches, so it is never a copy.
+    get activeModeId() {
+      return activeModeId
+    },
     collectionId,
     modeByThemeName: modeByThemeValue,
     resolveColor(ref: string): Color {
@@ -184,8 +191,8 @@ export function buildVarContext(
       const val = resolveVal(ref)
       return typeof val === 'string' ? val : ''
     },
-    setActiveTheme(themeName: string) {
-      const modeId = modeByThemeValue.get(`theme:${themeName}`)
+    setActiveTheme(themeKey: string, themeName: string) {
+      const modeId = modeByThemeValue.get(`${themeKey}:${themeName}`)
       if (modeId) {
         activeModeId = modeId
         graph.activeMode.set(collectionId, modeId)
