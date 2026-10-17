@@ -188,12 +188,24 @@ function findDescendantClone(
   return found
 }
 
+/**
+ * Drops the fill bindings a replaced paint invalidates. Without this the theme pass, which runs
+ * after the overrides, would paint the component's variable back over the override.
+ */
+function clearFillBindings(node: SceneNode): void {
+  const kept = Object.entries(node.boundVariables).filter(([key]) => !key.startsWith('fills['))
+  node.boundVariables = Object.fromEntries(kept)
+}
+
 function applyOverrideProps(
   target: SceneNode,
   overrideData: Partial<PenNode>,
   ctx: VarContext
 ): void {
-  if (overrideData.fill !== undefined) target.fills = convertFill(overrideData.fill, ctx, target)
+  if (overrideData.fill !== undefined) {
+    clearFillBindings(target)
+    target.fills = convertFill(overrideData.fill, ctx, target)
+  }
   if (overrideData.content !== undefined) target.text = overrideData.content
   if (overrideData.x !== undefined) target.x = overrideData.x
   if (overrideData.y !== undefined) target.y = overrideData.y
