@@ -9,6 +9,16 @@ export type PenAssetResolver = (url: string) => Uint8Array | undefined
 /** Reports how many assets have been read, so the loading screen can show progress. */
 export type PenAssetProgress = (completed: number, total: number) => void
 
+/** The bit of a loading session the read reports its progress to. */
+export interface PenAssetSink {
+  update(progress: { phase: 'decoding'; detail: string }): void
+}
+
+/** A progress reporter for a loading session, which counts the assets as they arrive. */
+export function penAssetProgress(load: PenAssetSink): PenAssetProgress {
+  return (completed, total) => load.update({ phase: 'decoding', detail: `${completed}/${total}` })
+}
+
 /** Bounds one image, so a single huge or slow one cannot hold up the open. */
 const MAX_IMAGE_BYTES = 32 * 1024 * 1024
 const IMAGE_TIMEOUT_MS = 20_000
@@ -161,20 +171,24 @@ async function documentFolder(filePath: string): Promise<string | undefined> {
  * them, so fetching afterwards would paint the design first and fill it in later. The loading
  * screen is where that wait belongs.
  */
+export interface PenAssetReadOptions {
+  onProgress?: PenAssetProgress
+  signal?: AbortSignal
+}
+
 export async function readDocumentWithAssets(
   io: IORegistry,
   file: File,
   filePath: string | undefined,
-  onProgress?: PenAssetProgress,
-  signal?: AbortSignal
+  options: PenAssetReadOptions = {}
 ) {
   const data = new Uint8Array(await file.arrayBuffer())
   const isPen = (filePath ?? file.name).toLowerCase().endsWith('.pen')
   const urls = isPen ? collectPenAssetUrls(new TextDecoder().decode(data)) : []
   const folder = filePath === undefined ? undefined : await documentFolder(filePath)
-  const resolveAsset = await readAssets(urls, folder, onProgress, signal)
+  const resolveAsset = await readAssets(urls, folder, options.onProgress, options.signal)
   // A cancelled open stops here instead of showing a document whose images were given up on.
-  signal?.throwIfAborted()
+  options.signal?.throwIfAborted()
   return io.readDocument(
     { name: file.name, mimeType: file.type || undefined, data },
     { resolveAsset }

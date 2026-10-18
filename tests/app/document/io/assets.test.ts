@@ -92,7 +92,7 @@ describe('opening a document while its images load', () => {
       },
       async () => {
         await expect(
-          readDocumentWithAssets(io, penFile(), undefined, undefined, controller.signal)
+          readDocumentWithAssets(io, penFile(), undefined, { signal: controller.signal })
         ).rejects.toThrow()
       }
     )
@@ -117,7 +117,7 @@ describe('opening a document while its images load', () => {
         }),
       async () => {
         await expect(
-          readDocumentWithAssets(io, penFile(), undefined, undefined, controller.signal)
+          readDocumentWithAssets(io, penFile(), undefined, { signal: controller.signal })
         ).rejects.toThrow()
       }
     )
