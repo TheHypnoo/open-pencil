@@ -588,8 +588,6 @@ function configureTextLeaf(
       if (constraintW === child.width && (child.derivedTextGlyphs?.length ?? 0) > 0) {
         return { width: constraintW, height: child.height }
       }
-      // One measurement per distinct text, not one per node carrying it, is what the shared cache
-      // buys here: an instance's clones ask for the same shape repeatedly.
       const result = { width: constraintW, height: measureTextForLayout(child, constraintW).height }
       cache.set(cacheKey, result)
       return result
