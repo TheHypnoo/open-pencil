@@ -205,7 +205,7 @@ describe('a path whose box the layout collapses', () => {
 
   test('rescales the geometry it kept once the box has a size again', () => {
     // The rule the layout write calls, from the state a collapse leaves: no box, geometry intact.
-    const restored = at(rescaleVectorNetworkForLayout(square(64), 0, 0, 16, 64))
+    const restored = expectDefined(rescaleVectorNetworkForLayout(square(64), 0, 0, 16, 64))
 
     expect(geometryBox(restored)).toEqual({ width: 16, height: 64 })
   })
