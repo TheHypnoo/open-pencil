@@ -29,11 +29,10 @@ describe('switching a document theme', () => {
 
   test('answers with the mode it switched to, not the one it started on', () => {
     const ctx = themedContext()
-    const dark = ctx.modeByThemeName.get('mode:dark')
 
     applyTheme({ mode: 'dark' }, ctx)
 
-    expect(ctx.activeModeId).toBe(dark)
+    expect(ctx.modeByThemeName.get('mode:dark')).toBe(ctx.activeModeId)
   })
 
   test('keeps the first mode until a node asks for another', () => {

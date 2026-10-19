@@ -1,13 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 
 import { parsePenFile, type PenNode } from '@open-pencil/pen'
-import type { Vector } from '@open-pencil/scene-graph'
+import type { GradientTransform, Vector } from '@open-pencil/scene-graph'
 import { colorToHex8 } from '@open-pencil/scene-graph/color'
 import {
   DEFAULT_GRADIENT_TRANSFORM,
   gradientPoint,
-  IDENTITY_GRADIENT_TRANSFORM,
-  type GradientTransform
+  IDENTITY_GRADIENT_TRANSFORM
 } from '@open-pencil/scene-graph/gradient'
 
 function at<T>(value: T | undefined): T {
@@ -132,7 +131,7 @@ describe('a linear gradient', () => {
       ]
     })
 
-    expect(at(stopsOf(json)[0]).hex).toBe('#ABCDEF')
+    expect(at(at(stopsOf(json))[0]).hex).toBe('#ABCDEF')
   })
 })
 

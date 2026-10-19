@@ -66,7 +66,7 @@ function penFile(): File {
 
 /** Replaces `fetch` for one test, keeping the `preconnect` tests expect to find. */
 async function withFetch(
-  stub: (url: string, init?: RequestInit) => Promise<Response>,
+  stub: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>,
   body: () => Promise<void>
 ): Promise<void> {
   const original = globalThis.fetch
