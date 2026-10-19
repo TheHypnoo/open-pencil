@@ -18,12 +18,24 @@ export type ComputeLayoutFn = (graph: SceneGraph, frameId: string) => void
 /** The extent a network's vertices span, which a collapsed box no longer records. */
 function networkExtent(network: VectorNetwork | null): { width: number; height: number } | null {
   if (!network || network.vertices.length === 0) return null
-  const xs = network.vertices.map((vertex) => vertex.x)
-  const ys = network.vertices.map((vertex) => vertex.y)
-  const width = Math.max(...xs) - Math.min(...xs)
-  const height = Math.max(...ys) - Math.min(...ys)
+  // One pass, because spreading a large path's coordinates exceeds the argument limit.
+  let minX = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const vertex of network.vertices) {
+    if (vertex.x < minX) minX = vertex.x
+    if (vertex.x > maxX) maxX = vertex.x
+    if (vertex.y < minY) minY = vertex.y
+    if (vertex.y > maxY) maxY = vertex.y
+  }
+  const width = maxX - minX
+  const height = maxY - minY
   return width > 0 && height > 0 ? { width, height } : null
 }
+
+/** The last box a path had with a size, so a collapse does not erase the box it was drawn at. */
+const lastBoxWithSize = new WeakMap<SceneNode, { width: number; height: number }>()
 
 /**
  * The geometry a path keeps when the layout changes its size.
@@ -38,15 +50,21 @@ export function rescaleVectorNetworkForLayout(
   fromWidth: number,
   fromHeight: number,
   toWidth: number,
-  toHeight: number
+  toHeight: number,
+  remembered?: { width: number; height: number }
 ): VectorNetwork | null {
   if (toWidth <= 0 || toHeight <= 0) return null
   if (fromWidth > 0 && fromHeight > 0) {
     return scaleVectorNetworkForResize(network, fromWidth, fromHeight, toWidth, toHeight)
   }
+  // Each axis keeps what it still knows: the box it had, else the extent its geometry spans. A
+  // collapsed axis must not answer for the other one, which the layout may have left positive, and
+  // a box the path did not fill is not the box it was drawn at.
   const extent = networkExtent(network)
-  if (!extent) return null
-  return scaleVectorNetworkForResize(network, extent.width, extent.height, toWidth, toHeight)
+  const sourceWidth = fromWidth > 0 ? fromWidth : (remembered?.width ?? extent?.width)
+  const sourceHeight = fromHeight > 0 ? fromHeight : (remembered?.height ?? extent?.height)
+  if (!sourceWidth || !sourceHeight) return null
+  return scaleVectorNetworkForResize(network, sourceWidth, sourceHeight, toWidth, toHeight)
 }
 
 function preservesImportedHugCrossSize(
@@ -92,14 +110,19 @@ function writeLayoutGeometry(
   // rescale that geometry too. Without this a path keeps its old extent and draws outside the box,
   // which is what an instance smaller than its component turns into.
   if (node.type === 'VECTOR') {
+    const toWidth = changes.width ?? node.width
+    const toHeight = changes.height ?? node.height
     const network = rescaleVectorNetworkForLayout(
       node.vectorNetwork,
       node.width,
       node.height,
-      changes.width ?? node.width,
-      changes.height ?? node.height
+      toWidth,
+      toHeight,
+      lastBoxWithSize.get(node)
     )
     if (network) changes.vectorNetwork = network
+    // The box the geometry now matches is what a later collapse has to remember.
+    if (toWidth > 0 && toHeight > 0) lastBoxWithSize.set(node, { width: toWidth, height: toHeight })
   }
   if (Object.keys(changes).length > 0) graph.updateNode(id, changes)
   if (!CONSTRAINT_PARENT_TYPES.has(node.type)) return

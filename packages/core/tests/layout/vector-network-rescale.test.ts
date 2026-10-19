@@ -42,6 +42,26 @@ function square(size: number): VectorNetwork {
   }
 }
 
+/** A closed square inset `inset` inside a `box`, as a path that does not fill its box. */
+function insetSquare(box: number, inset: number): VectorNetwork {
+  const corners = [
+    { x: inset, y: inset },
+    { x: box - inset, y: inset },
+    { x: box - inset, y: box - inset },
+    { x: inset, y: box - inset }
+  ]
+  return {
+    vertices: corners.map((corner) => ({ ...corner })),
+    segments: corners.map((_, index) => ({
+      start: index,
+      end: (index + 1) % corners.length,
+      tangentStart: { x: 0, y: 0 },
+      tangentEnd: { x: 0, y: 0 }
+    })),
+    regions: [{ windingRule: 'NONZERO', loops: [[0, 1, 2, 3]] }]
+  }
+}
+
 function geometryBox(network: VectorNetwork) {
   const xs = network.vertices.map((vertex) => vertex.x)
   const ys = network.vertices.map((vertex) => vertex.y)
@@ -208,6 +228,29 @@ describe('a path whose box the layout collapses', () => {
     const restored = expectDefined(rescaleVectorNetworkForLayout(square(64), 0, 0, 16, 64))
 
     expect(geometryBox(restored)).toEqual({ width: 16, height: 64 })
+  })
+
+  test('keeps an inset path inside the box it goes back to', () => {
+    // Drawn at 64 but spanning 16..48: its extent is not the box it was drawn at, so the extent
+    // cannot answer for it, or the restored path spills out of the box the layout gives back.
+    const restored = expectDefined(
+      rescaleVectorNetworkForLayout(insetSquare(64, 16), 0, 0, 16, 16, { width: 64, height: 64 })
+    )
+    const xs = restored.vertices.map((vertex) => vertex.x)
+
+    expect(geometryBox(restored)).toEqual({ width: 8, height: 8 })
+    expect(Math.min(...xs)).toBeGreaterThanOrEqual(0)
+    expect(Math.max(...xs)).toBeLessThanOrEqual(16)
+  })
+
+  test('answers only for the axis that lost its size', () => {
+    // The width collapsed while the height stayed 64: the height must not be rescaled by the
+    // geometry's extent, which would change it.
+    const restored = expectDefined(
+      rescaleVectorNetworkForLayout(insetSquare(64, 16), 0, 64, 16, 64, { width: 64, height: 64 })
+    )
+
+    expect(geometryBox(restored)).toEqual({ width: 8, height: 32 })
   })
 
   test('leaves the geometry alone while the target box has no size', () => {
