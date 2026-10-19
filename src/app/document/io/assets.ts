@@ -89,14 +89,19 @@ async function readLocal(url: string, folder: string): Promise<Uint8Array | unde
     console.warn(`[pen] Skipping the image "${url}": it is not a file in the document's folder`)
     return undefined
   }
-  const [{ join }, { readFile, stat }] = await Promise.all([
+  const [{ join }, { lstat, readFile }] = await Promise.all([
     import('@tauri-apps/api/path'),
     import('@tauri-apps/plugin-fs')
   ])
   const path = await join(folder, url)
-  // A file on disk is bounded like a download, so one huge asset cannot fill memory either.
-  const { size } = await stat(path)
-  if (size > MAX_IMAGE_BYTES) {
+  // `lstat` does not follow the last link, so a link in the folder is not mistaken for a file in
+  // it. A file on disk is also bounded like a download, so one huge asset cannot fill memory.
+  const info = await lstat(path)
+  if (!info.isFile || info.isSymlink) {
+    console.warn(`[pen] Skipping the image "${url}": it is not a regular file in the folder`)
+    return undefined
+  }
+  if (info.size > MAX_IMAGE_BYTES) {
     console.warn(`[pen] Skipping the image "${url}": it is larger than ${MAX_IMAGE_BYTES} bytes`)
     return undefined
   }

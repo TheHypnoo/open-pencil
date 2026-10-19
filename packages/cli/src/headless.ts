@@ -1,6 +1,6 @@
-import { readFileSync, statSync } from 'node:fs'
+import { readFileSync, realpathSync, statSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname, resolve, sep } from 'node:path'
 
 import { SkiaRenderer } from '@open-pencil/core/canvas'
 import { BUILTIN_IO_FORMATS, IORegistry, initCanvasKit } from '@open-pencil/core/io'
@@ -22,18 +22,40 @@ const io = new IORegistry(CLI_IO_FORMATS)
 /** Bounds one asset, so a document cannot load an arbitrarily large file into memory. */
 const MAX_ASSET_BYTES = 32 * 1024 * 1024
 
+/** The folder a document sits in, resolved so a link cannot decide where its assets live. */
+function realFolder(filePath: string): string {
+  const folder = dirname(resolve(filePath))
+  try {
+    return realpathSync(folder)
+  } catch {
+    return folder
+  }
+}
+
+/** Whether `path` is inside `folder`, separator-aware so `/docs-2` does not count as `/docs`. */
+function isInside(folder: string, path: string): boolean {
+  return path === folder || path.startsWith(`${folder}${sep}`)
+}
+
 /**
  * Reads an asset a document references relative to itself. A `.pen` document names its images
  * that way, so opening one from disk is the only way its fills get pixels. A name that leaves the
- * document's folder is not an asset and is skipped, as is one that is not a regular file or is
- * larger than the bound; an asset that cannot be read is reported and left out, because one
- * unreadable image must not fail the document.
+ * document's folder is not an asset and is skipped, and a link that points out of it is skipped
+ * too, because where the file really is decides; so is one that is not a regular file or is larger
+ * than the bound. An asset that cannot be read is reported and left out, because one unreadable
+ * image must not fail the document.
  */
 function documentAssetResolver(filePath: string): (assetPath: string) => Uint8Array | undefined {
-  const base = dirname(resolve(filePath))
+  const folder = realFolder(filePath)
   return (assetPath) => {
     if (!isDocumentAssetName(assetPath)) return undefined
-    const path = resolve(base, assetPath)
+    let path: string
+    try {
+      path = realpathSync(resolve(folder, assetPath))
+    } catch {
+      return undefined
+    }
+    if (!isInside(folder, path)) return undefined
     const info = statSync(path, { throwIfNoEntry: false })
     if (!info?.isFile() || info.size > MAX_ASSET_BYTES) return undefined
     try {

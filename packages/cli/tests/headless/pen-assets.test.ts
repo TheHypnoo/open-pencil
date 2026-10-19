@@ -1,4 +1,5 @@
 import { describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { symlinkSync } from 'node:fs'
 import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -68,6 +69,36 @@ describe('loading a .pen document from disk', () => {
             width: 100,
             height: 100,
             fill: { type: 'image', enabled: true, url: 'assets/gone.png', mode: 'fit' }
+          }
+        ]
+      })
+    )
+
+    const graph = await loadDocument(penPath)
+
+    expect([...graph.getAllNodes()].some((node) => node.name === 'Hero')).toBe(true)
+    expect(graph.images.size).toBe(0)
+  })
+
+  test('skips an asset that is a link pointing outside the document', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'open-pencil-pen-link-'))
+    const outside = await mkdtemp(join(tmpdir(), 'open-pencil-pen-outside-'))
+    await writeFile(join(outside, 'secret.png'), PNG)
+    await mkdir(join(dir, 'assets'), { recursive: true })
+    symlinkSync(join(outside, 'secret.png'), join(dir, 'assets', 'hero.png'))
+    const penPath = join(dir, 'doc.pen')
+    await writeFile(
+      penPath,
+      JSON.stringify({
+        version: '2.8',
+        children: [
+          {
+            type: 'frame',
+            id: 'f1',
+            name: 'Hero',
+            width: 100,
+            height: 100,
+            fill: { type: 'image', enabled: true, url: 'assets/hero.png', mode: 'fit' }
           }
         ]
       })
