@@ -2,10 +2,11 @@ import * as v from 'valibot'
 
 import { SceneGraph } from '@open-pencil/scene-graph'
 
+import { pathNetwork } from './geometry'
 import { createImageStore } from './images'
 import { populateInstances } from './instances'
 import { spreadAround } from './layout'
-import { createSceneNode, type Build, type PenIconSource } from './nodes'
+import { createSceneNode, redrawIconAtLaidOutSize, type Build, type PenIconSource } from './nodes'
 import { placeLayers } from './placement'
 import { penFileSchema, type PenDocument, type PenNode } from './schema'
 import { buildVarContext } from './variables'
@@ -38,6 +39,21 @@ function groupsInFlow(graph: SceneGraph, groupIds: Iterable<string>): boolean {
     if (parent && parent.layoutMode !== 'NONE') return true
   }
   return false
+}
+
+/**
+ * Draws each path in its box once boxes have their final size, which fill and fit sizing only give
+ * once laid out, and redraws each icon laying out sized.
+ */
+function drawAtFinalSize(build: Build, laidOut: boolean): void {
+  for (const [id, pen] of build.effective) {
+    const node = build.graph.getNode(id)
+    if (!node) continue
+    if (pen.type === 'path') {
+      const network = pathNetwork(pen, node.width, node.height)
+      if (network) node.vectorNetwork = network
+    } else if (pen.type === 'icon' && laidOut) redrawIconAtLaidOutSize(node, pen, build)
+  }
 }
 
 /** A `.pen` document's JSON, validated; throws for text that is not one. */
@@ -78,6 +94,7 @@ export function buildPenGraph(doc: PenDocument, options: PenReadOptions = {}): S
   populateInstances(build)
 
   options.layout?.(graph)
+  drawAtFinalSize(build, options.layout !== undefined)
   const spread = options.layout ? spreadAround(graph, [...build.aroundIds]) : false
   placeLayers(graph, build.placements, [...build.groupIds])
   if (spread || groupsInFlow(graph, build.groupIds)) options.layout?.(graph)
