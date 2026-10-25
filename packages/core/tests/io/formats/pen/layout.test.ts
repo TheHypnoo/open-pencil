@@ -5,8 +5,12 @@ import { parsePenFile, type PenDocument, type PenIconSource, type PenNode } from
 import { getNodeLocalMatrix } from '@open-pencil/scene-graph/coordinate'
 import Matrix from '@open-pencil/scene-graph/matrix'
 
-function parseLayoutDocument(children: PenNode[], icons?: PenIconSource) {
-  const document: PenDocument = { version: '2.17', children }
+function parseLayoutDocument(
+  children: PenNode[],
+  icons?: PenIconSource,
+  fields: Partial<PenDocument> = {}
+) {
+  const document: PenDocument = { version: '2.17', ...fields, children }
   // As Core's .pen reader lays out what it reads.
   return parsePenFile(JSON.stringify(document), {
     icons,
@@ -346,6 +350,38 @@ describe('parsePenFile — paths sized by layout', () => {
     expect(graph.getNode(copy)).toMatchObject({ width: 16, height: 16 })
     expect(extent(copy)).toEqual({ width: 16, height: 16 })
   })
+
+  test('draws a filling path at the size a second layout gives it', () => {
+    // Fitting the group to its 40 wide layer lays the row out again, widening the path.
+    const graph = parseLayoutDocument([
+      {
+        id: 'row',
+        type: 'frame',
+        width: 200,
+        height: 50,
+        children: [
+          {
+            id: 'group',
+            type: 'group',
+            children: [{ id: 'swatch', type: 'rectangle', width: 40, height: 20 }]
+          },
+          {
+            id: 'line',
+            type: 'path',
+            geometry: 'M0 0H10V10H0Z',
+            viewBox: [0, 0, 10, 10],
+            width: 'fill_container',
+            height: 50
+          }
+        ]
+      }
+    ])
+
+    const line = graph.getNode('line')
+    const xs = line?.vectorNetwork?.vertices.map((vertex) => vertex.x) ?? []
+    expect(line?.width).toBe(160)
+    expect(Math.max(...xs)).toBe(160)
+  })
 })
 
 describe('parsePenFile — icons sized by layout', () => {
@@ -384,6 +420,28 @@ describe('parsePenFile — icons sized by layout', () => {
     const [glyph] = graph.getChildren('icon')
     expect(glyph).toMatchObject({ width: 24, height: 24 })
     expect(glyph.fills[0]?.color).toEqual({ r: 1, g: 0, b: 0, a: 1 })
+  })
+
+  test('redraws a filling icon in the theme it was read in', () => {
+    const graph = parseLayoutDocument(
+      [{ ...box('box', [{ ...icon, fill: '$ink' }]), theme: { mode: 'dark' } }],
+      icons,
+      {
+        themes: { mode: ['light', 'dark'] },
+        variables: {
+          ink: {
+            type: 'color',
+            value: [
+              { value: '#FF0000', theme: { mode: 'light' } },
+              { value: '#00FF00', theme: { mode: 'dark' } }
+            ]
+          }
+        }
+      }
+    )
+    const [glyph] = graph.getChildren('icon')
+    expect(glyph).toMatchObject({ width: 24, height: 24 })
+    expect(glyph.fills[0]?.color).toEqual({ r: 0, g: 1, b: 0, a: 1 })
   })
 
   test('draws a filling icon in a component at the size of each instance', () => {

@@ -4,7 +4,7 @@ import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { pathNetwork } from './geometry'
 import { createImageStore } from './images'
-import { populateInstances } from './instances'
+import { inAncestorThemes, populateInstances } from './instances'
 import { spreadAround } from './layout'
 import { createSceneNode, redrawIconAtLaidOutSize, type Build, type PenIconSource } from './nodes'
 import { placeLayers } from './placement'
@@ -52,7 +52,17 @@ function drawAtFinalSize(build: Build, laidOut: boolean): void {
     if (pen.type === 'path') {
       const network = pathNetwork(pen, node.width, node.height)
       if (network) node.vectorNetwork = network
-    } else if (pen.type === 'icon' && laidOut) redrawIconAtLaidOutSize(node, pen, build)
+    } else if (pen.type === 'icon' && laidOut) {
+      // In the themes the icon was read in, which its colour and glyph may take variables from.
+      inAncestorThemes(build, node, () => {
+        const leave = pen.theme ? build.ctx.enterTheme(pen.theme) : undefined
+        try {
+          redrawIconAtLaidOutSize(node, pen, build)
+        } finally {
+          leave?.()
+        }
+      })
+    }
   }
 }
 
@@ -97,7 +107,10 @@ export function buildPenGraph(doc: PenDocument, options: PenReadOptions = {}): S
   drawAtFinalSize(build, options.layout !== undefined)
   const spread = options.layout ? spreadAround(graph, [...build.aroundIds]) : false
   placeLayers(graph, build.placements, [...build.groupIds])
-  if (spread || groupsInFlow(graph, build.groupIds)) options.layout?.(graph)
+  if (options.layout && (spread || groupsInFlow(graph, build.groupIds))) {
+    options.layout(graph)
+    drawAtFinalSize(build, true)
+  }
 
   if (graph.getPages(true).length === 0) {
     graph.addPage('Page 1')
