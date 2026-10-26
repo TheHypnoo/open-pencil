@@ -206,12 +206,31 @@ pending request that a deployment administrator approves or rejects; approval ca
 Deployment administrators are separate from workspace administrators, and startup never grants
 either role: the first operator is approved and promoted through the `admin` command.
 
-The console's People list pages through accounts in sign-up order, searched by name or email and
-filtered to administrators, suspended accounts, or accounts without two-step sign-in, with a count
-for each filter. A person's page shows how they sign in, their workspaces, sessions, and recent
+The console's lists are tables the server pages, searches, and filters: each admin list endpoint
+takes `search`, `filter`, `limit`, and `offset` and answers with its rows, the `total` matching, and
+how many match the search under each filter (`src/admin/list.ts`). A list declares its filters once, as conditions on its table; one query counts them all with `count(*) filter (where …)`, and the page uses the same condition. People lists accounts in sign-up
+order, searched by name or email and filtered to administrators, suspended accounts, or accounts
+without two-step sign-in; access requests are searched by name or email in each status; email by
+recipient and delivery; activity by the names of who acted and whom it was about, and by what it
+was about. In the portal, `usePortalList` (`src/app/cloud-portal/list.ts`) holds a list's search,
+filter, and page and builds its TanStack Table; `PortalTable` draws the toolbar, the shared
+`AppDataTable`, and the pages, and each list only defines its columns, which render their cells with the components in `src/components/cloud-portal/table/`. A row has at most one inline
+action, such as Approve; the rest are in its “…” menu. A person's page shows how they sign in, their workspaces, sessions, and recent
 sign-ins. Administrators make and remove administrators, sign people out everywhere, suspend
 with a reason the activity log keeps, and reset a locked-out person's two-step sign-in, which
-removes their authenticator app, recovery codes, and passkeys. Every action asks once more.
+removes their authenticator app, recovery codes, and passkeys, and take down a person's picture.
+Every action asks once more.
+
+Account pictures live in `user_picture`, one per account, and `user.image` holds the address the
+server serves them from, `/api/pictures/:userId/:version`, where the version is the start of the
+picture's SHA-256: a new picture is a new address. Responses are cached for one day, so a
+picture an administrator removes may stay visible until the cache expires. The
+page crops and shrinks a picture to a 256-pixel JPEG; the server accepts PNG or JPEG of at most
+256 KB and 1024 pixels a side, reading the type and size from the bytes. A Google picture is
+fetched once a sign-in issues its session and kept the same way; one that cannot be fetched leaves
+initials, never a link to Google. The server fetches only from Google's picture host and follows no
+redirects. Only a provider's sign-in may write `user.image` through Better Auth; an address
+sent with email sign-up or a user update is dropped.
 
 ## Portal
 
@@ -317,7 +336,9 @@ forwards completions to one upstream with one key, and keeps one usage row per s
 workspace's monthly spend is the sum of its rows. It reads usage from the upstream's answer, asking
 streams for it with `stream_options.include_usage`, and keeps reading after the editor disconnects
 so a request is still charged. It admits a request while credits remain and charges it afterwards,
-so in-flight requests can overdraw an allowance; the official service reserves credits instead. It forwards only
+so in-flight requests can overdraw an allowance; the official service reserves credits instead. An
+answer ends only after its charge is recorded, so the wallet the editor reads once a reply ends
+includes it, and a refusal for lack of credits says when the allowance renews. It forwards only
 chat completion fields, so a router's fallback or provider fields cannot run a model outside the
 catalog on its key. An upstream answer has ten minutes in all, streamed or not, before the relay ends it.
 
@@ -490,11 +511,27 @@ send them to. Peer-to-peer rooms move to `/rooms/:id` so "share" names a shared 
 cost is that a browser editor at any other address cannot keep a Cloud document in its address
 bar; every server serves its own editor, and the desktop app gets links through `openpencil://`.
 
+**2026-10 · A link shows nothing until its document does.** A document link asks someone signed
+out to sign in on the server's page before the editor loads, and comes back to the document. A
+link that opens, or a sign-in the tab comes back from, keeps the boot splash's look over the
+window until the document is drawn, over Home rather than an empty document, so a link that
+fails or waits for a sign-in leaves the person on Home. A tab that holds its document never shows
+the room's joining screen, since the room's state can arrive in parts. The cost is a longer
+splash on a slow connection in place of an editor that fills in.
+
 **2026-10 · Workspaces are deleted at once, not after a grace period.** GitLab keeps a deleted group
 for 30 days so it can be restored; a Cloud workspace can only be deleted once it holds no
 documents, and deleted documents already have their own retention, so a delay would protect
 nothing but the name and members. Workspace settings stay in the editor's Members dialog, which
 the desktop app reaches without leaving for a browser.
+
+**2026-10 · Pictures are kept in the database, and Gravatar is not used.** A 256-pixel JPEG is
+a few dozen kilobytes. Object storage only hands out short-lived signed links, so pictures there
+would need upload tracking, a quota exemption, and a redirect for every picture a page shows; in a
+table the server reads the bytes, checks them, and serves them itself. Gravatar would send every
+viewer's address and a hash of each person's email to a third party, which a self-hosted server
+should not do by default; copying a linked Google picture instead of linking to it follows the
+same rule.
 
 **2026-10 · Tables are named for what they hold.** OpenPencil's tables beside Better Auth's had a
 `cloud_` prefix the rest never had; they lose it, and only a name Better Auth already uses gets a

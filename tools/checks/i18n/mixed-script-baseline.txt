@@ -185,6 +185,7 @@ ja:menu.copyNodeId
 ja:menu.copyXPath
 ja:menu.exportSelectionAsFig
 ja:menu.exportSelectionAsPNG
+ja:menu.exportSelectionAsDrawIO
 ja:menu.exportSelectionAsPPTX
 ja:menu.exportSelectionAsSVG
 ja:menu.toggleUI
@@ -408,6 +409,7 @@ zh-cn:menu.copyNodeId
 zh-cn:menu.copyXPath
 zh-cn:menu.exportSelectionAsFig
 zh-cn:menu.exportSelectionAsPNG
+zh-cn:menu.exportSelectionAsDrawIO
 zh-cn:menu.exportSelectionAsPPTX
 zh-cn:menu.exportSelectionAsSVG
 zh-cn:panels.behaviourAddVariants
@@ -481,6 +483,7 @@ zh-cn:storage.waitlistOpenWebsite
 zh-cn:storage.waitlistUnavailable
 zh-cn:statuses.figmaShows
 zh-cn:statuses.presetHandoff
+ja:cloudPortal.columnAddress
 ja:cloudPortal.signInTitle
 ja:cloudPortal.newHere
 ja:cloudPortal.returnsToDesktop
@@ -492,6 +495,7 @@ ja:cloudPortal.deviceWarningDescription
 ja:cloudPortal.deviceApprovedDescription
 ja:cloudPortal.deviceExpiredDescription
 ja:cloudPortal.authenticatorOff
+zh-cn:cloudPortal.columnAddress
 zh-cn:cloudPortal.signInTitle
 zh-cn:cloudPortal.newHere
 zh-cn:cloudPortal.returnsToDesktop
@@ -523,6 +527,7 @@ ja:cloudPortal.welcomeTitle
 ja:cloudPortal.accountId
 ja:cloudPortal.desktopApp
 ja:cloudPortal.methodDesktop
+ja:cloudPortal.pictureUnreadable
 zh-cn:cloud.connectHeading
 zh-cn:cloud.connectServerDescription
 zh-cn:cloud.officialDescription
@@ -544,6 +549,7 @@ zh-cn:cloudPortal.accountId
 zh-cn:cloudPortal.accountIdDescription
 zh-cn:cloudPortal.desktopApp
 zh-cn:cloudPortal.methodDesktop
+zh-cn:cloudPortal.pictureUnreadable
 ja:ai.cloudAIUnavailable
 ja:ai.cloudAINoWorkspace
 ja:ai.chatCloudCreditsExhausted
@@ -556,3 +562,9 @@ ja:ai.cloudAICatalogFailed
 zh-cn:ai.cloudAICatalogFailed
 ja:ai.cloudAIWorkspacesFailed
 zh-cn:ai.cloudAIWorkspacesFailed
+ja:ai.chatCloudAllowanceUsed
+ja:ai.chatCloudAllowanceUsedUntil
+ja:ai.connectionTestCloudCreditsExhausted
+zh-cn:ai.chatCloudAllowanceUsed
+zh-cn:ai.chatCloudAllowanceUsedUntil
+zh-cn:ai.connectionTestCloudCreditsExhausted

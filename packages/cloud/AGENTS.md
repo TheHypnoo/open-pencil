@@ -6,6 +6,8 @@ Optional, self-hostable backend; the design is in `packages/docs/development/clo
 
 - Consumers import the `contract`, `client`, `email`, `server`, and `runtime/node` subpaths; browser code imports only `contract` and `client`, which stay on the browser baseline (`tests/app/shell/support/baseline.test.ts`, `compat/compat` in `oxlint.json`).
 - `src/server` receives its database, object store, auth adapter, and delivery through injection and never imports `pg`, opens listeners, runs migrations, or starts timers; runtimes under `src/runtime/` own those (`src/runtime/node/server.ts`).
+- The package is published to npm; a directory imported as `#cloud/<dir>` is listed in `imports` in `package.json`, since the wildcard there names `.ts` files (`bun run check:packages`).
+- `@better-auth/core` is pinned to the `better-auth` version though nothing imports it: `@better-auth/passkey` accepts any later core, whose exact `@better-fetch/fetch` differs from its own, and npm then never finishes installing the package (`bun run test:packages`).
 - Runtime code runs on Node 22 and Bun alike: serve HTTP through `@hono/node-server`, not `Bun.serve` or other `Bun.*` APIs (`tsdown.standalone.config.ts` targets `node22`).
 
 ## Data and security
@@ -14,7 +16,9 @@ Optional, self-hostable backend; the design is in `packages/docs/development/clo
 - Code inside Better Auth's own callbacks must not query the database, which deadlocks its transaction on one connection (`tests/integration/server/account/routes.test.ts`).
 - Name a table for what it holds, without a `cloud_` prefix; only a name Better Auth already uses gets a qualifier, such as `api_rate_limit` (`src/server/db/migrations/025_table_names.ts`).
 - Renaming a table that shipped migrations query gives them a type under the name they ran with, so their SQL stays the same (`LegacyAuthSchemaDatabase` in `src/server/db/migrations/helpers.ts`).
+- `user.image` only ever holds an address this server serves; a picture from anywhere else is copied into `user_picture` or dropped, never linked (`src/server/pictures/service.ts`, `tests/integration/server/pictures/routes.test.ts`).
 - Database rows use `crypto.randomUUID()`; secrets that leave the server use `randomHex` from `@open-pencil/scene-graph/random`, are stored as SHA-256 digests (a single-use OAuth continuation keeps a JWE copy), and travel in URL fragments (`src/server/sharing/capabilities/service.ts`).
+- An admin list takes `search`, `filter`, `limit`, and `offset` through `listQuery` and answers with its rows, `total`, and per-filter `counts`; it declares its filters once as `ListFilters`, which count in one query and page with the same condition (`src/admin/list.ts`, `tests/integration/admin/lists.test.ts`).
 - Every HTTP body goes through `validatedJSON` with a contract schema, and every response the client reads is parsed with Valibot (`src/server/validation.ts`, `src/client/api.ts`).
 - A revision's images live in `revision_image`; code that makes a revision from another copies them with `copyRevisionImages`, and a storage object a `workspace_image` holds is never unreferenced (`src/server/documents/images.ts`, `tests/integration/server/documents/images.test.ts`).
 - Add schema changes as a new numbered migration in `src/server/db/migrations/` registered in `src/server/db/migrate.ts`; never edit a migration that has shipped. Better Auth's tables have their own versioned migration (`016_auth_schema.ts`).

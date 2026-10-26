@@ -1,7 +1,13 @@
 import type { CharacterStyleOverride, SceneNode } from '@open-pencil/scene-graph'
+import { textLengthPixels } from '@open-pencil/scene-graph/text'
 import { resolveNodeTextDirection } from '@open-pencil/scene-graph/text/direction'
 
-import { formatColor, type SVGExportContext, type SVGFontAlias } from '#core/io/formats/svg/defs'
+import {
+  formatColor,
+  type SVGExportContext,
+  type SVGFontAlias,
+  type SVGFontRequest
+} from '#core/io/formats/svg/defs'
 import { svg, type SVGNode } from '#core/io/formats/svg/node'
 import { round } from '#core/io/formats/svg/paths'
 import {
@@ -11,20 +17,31 @@ import {
   type SpanAttrs
 } from '#core/io/formats/svg/text/lines'
 import { shownText } from '#core/text/case'
-import type { FontFaceRef } from '#core/text/face'
 import { textFontFace } from '#core/text/requirements'
 
 function styleOverrideToTspanAttrs(
   style: CharacterStyleOverride,
   colorSpace: 'srgb' | 'display-p3',
-  parentFillOpacity: number | undefined
+  parentFillOpacity: number | undefined,
+  node: Pick<SceneNode, 'fontSize' | 'letterSpacing'>
 ): Record<string, string | number | undefined> {
   const attrs: Record<string, string | number | undefined> = {}
   if (style.fontFamily) attrs['font-family'] = style.fontFamily
   if (style.fontSize) attrs['font-size'] = style.fontSize
   if (style.fontWeight) attrs['font-weight'] = style.fontWeight
   if (style.italic) attrs['font-style'] = 'italic'
-  if (style.letterSpacing) attrs['letter-spacing'] = round(style.letterSpacing)
+  // A run's own spacing is written even at zero, or it would inherit the layer's. A percent the
+  // run inherits follows its own font size, so a larger or smaller run writes it again.
+  const inherited =
+    style.fontSize !== undefined &&
+    node.letterSpacing.unit === 'PERCENT' &&
+    node.letterSpacing.value !== 0
+      ? node.letterSpacing
+      : undefined
+  const spacing = style.letterSpacing ?? inherited
+  if (spacing) {
+    attrs['letter-spacing'] = round(textLengthPixels(spacing, style.fontSize ?? node.fontSize))
+  }
   if (style.textDecoration === 'UNDERLINE') attrs['text-decoration'] = 'underline'
   if (style.textDecoration === 'STRIKETHROUGH') attrs['text-decoration'] = 'line-through'
   if (style.fills) {
@@ -50,15 +67,25 @@ function styleOverrideToTspanAttrs(
  * the face itself, so text inside an aliased parent does not inherit the alias.
  */
 function aliasedFontAttrs(
-  face: FontFaceRef,
+  face: SVGFontRequest,
   fontAlias: SVGFontAlias
 ): Record<string, string | number> {
-  const alias = fontAlias(face.family, face.style)
+  const alias = fontAlias(face)
   if (alias) return { 'font-family': alias, 'font-weight': 'normal', 'font-style': 'normal' }
   return {
     'font-family': face.family,
     'font-weight': face.weight,
     'font-style': face.italic ? 'italic' : 'normal'
+  }
+}
+
+/** The face a run of `node` is drawn in, with the size and axes its instance follows. */
+function fontRequest(node: SceneNode, style: CharacterStyleOverride = {}): SVGFontRequest {
+  return {
+    ...textFontFace(node, style),
+    fontSize: style.fontSize ?? node.fontSize,
+    variations: style.fontVariations ?? node.fontVariations,
+    opticalSizeFromFontSize: node.opticalSizeFromFontSize
   }
 }
 
@@ -128,6 +155,7 @@ export function renderTextNode(
   let textDecoration: 'underline' | 'line-through' | undefined
   if (node.textDecoration === 'UNDERLINE') textDecoration = 'underline'
   else if (node.textDecoration === 'STRIKETHROUGH') textDecoration = 'line-through'
+  const letterSpacing = textLengthPixels(node.letterSpacing, node.fontSize)
 
   const attrs: Record<string, string | number | undefined> = {
     'font-family': node.fontFamily || undefined,
@@ -140,12 +168,12 @@ export function renderTextNode(
     direction: direction === 'RTL' && !laidOut ? 'rtl' : undefined,
     'text-anchor': laidOut ? undefined : textAnchorForNode(node, direction),
     'text-decoration': textDecoration,
-    'letter-spacing': node.letterSpacing ? round(node.letterSpacing) : undefined,
-    ...(fontAlias ? aliasedFontAttrs(textFontFace(node), fontAlias) : {})
+    'letter-spacing': letterSpacing ? round(letterSpacing) : undefined,
+    ...(fontAlias ? aliasedFontAttrs(fontRequest(node), fontAlias) : {})
   }
   const spanAttrs = (style: CharacterStyleOverride) => ({
-    ...styleOverrideToTspanAttrs(style, colorSpace, fillOpacity),
-    ...(fontAlias ? aliasedFontAttrs(textFontFace(node, style), fontAlias) : {})
+    ...styleOverrideToTspanAttrs(style, colorSpace, fillOpacity, node),
+    ...(fontAlias ? aliasedFontAttrs(fontRequest(node, style), fontAlias) : {})
   })
 
   if (laidOut) {

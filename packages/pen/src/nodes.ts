@@ -6,6 +6,7 @@ import type {
   SceneGraph,
   SceneNode
 } from '@open-pencil/scene-graph'
+import { CORNER_FIELDS } from '@open-pencil/scene-graph/fields'
 import { fillSizingFields } from '@open-pencil/scene-graph/layout'
 import type { Color } from '@open-pencil/scene-graph/primitives'
 
@@ -23,17 +24,25 @@ import {
 } from './layout'
 import { applyStroke, convertPaints, strokeFields } from './paints'
 import { isPlain, type PenPlacement } from './placement'
-import type { PenNode, PenOverride } from './schema'
+import type { NodeFields, PenNode, PenOverride } from './schema'
 import { applyTextProps } from './text'
 import { bindIfVar, resolveBoolean, resolveNumber, type VarContext } from './variables'
 
 /** Where icon glyphs come from, as the host loaded them. */
 export interface PenIconSource {
   /**
-   * Draws the Iconify icon `name` into the frame, `size` square at its origin, painted `color`
-   * where the icon takes its colour. False when the source does not have it.
+   * Draws the icon `name` into the frame, `size` square at its origin, painted `color` where the
+   * icon takes its colour and drawn with `options` where its set has them. False when the source
+   * does not have it.
    */
-  draw(graph: SceneGraph, frameId: string, name: string, size: number, color: Color): boolean
+  draw(
+    graph: SceneGraph,
+    frameId: string,
+    name: string,
+    size: number,
+    color: Color,
+    options?: Record<string, number>
+  ): boolean
 }
 
 /** What reading one document builds up. */
@@ -58,6 +67,8 @@ export interface Build {
   iconComponents: Map<string, string>
   /** The page those components are on, added with the first one. */
   iconPageId: string | null
+  /** Layers whose children an override replaced, whose instances are detached. */
+  replaced: Set<string>
 }
 
 function penPlacement(pen: PenOverride, ctx: VarContext): PenPlacement {
@@ -119,6 +130,96 @@ function applyAutoLayout(
     node.primaryAxisSizing = own(widthSizing)
     node.counterAxisSizing = own(heightSizing)
   }
+}
+
+const PLACEMENT_FIELDS = ['x', 'y', 'rotation', 'flipX', 'flipY'] as const
+
+/** What `applyStroke` writes: a stroke's weight and alignment are its paints'. */
+const STROKE_WRITES = [
+  'strokes',
+  'independentStrokeWeights',
+  'borderTopWeight',
+  'borderRightWeight',
+  'borderBottomWeight',
+  'borderLeftWeight',
+  'strokeCap',
+  'strokeJoin'
+] as const
+
+/**
+ * The layer fields each property `applyPenProperties` reads writes. A property that writes none of
+ * the layer's own fields maps to none: bookkeeping, the decorations pen.dev does not draw, and an
+ * icon's glyph, which is the layer's children or the component it shows.
+ */
+const PROPERTY_FIELDS = {
+  name: ['name'],
+  context: [],
+  x: PLACEMENT_FIELDS,
+  y: PLACEMENT_FIELDS,
+  width: ['width'],
+  height: ['height'],
+  reusable: [],
+  theme: ['variableModes'],
+  enabled: ['visible'],
+  opacity: ['opacity'],
+  flipX: PLACEMENT_FIELDS,
+  flipY: PLACEMENT_FIELDS,
+  layoutPosition: ['layoutPositioning'],
+  rotation: PLACEMENT_FIELDS,
+  fill: ['fills'],
+  stroke: STROKE_WRITES,
+  strokeWidth: STROKE_WRITES,
+  strokeLinecap: ['strokes', 'strokeCap'],
+  strokeLinejoin: ['strokes', 'strokeJoin'],
+  strokeAlignment: ['strokes'],
+  effect: ['effects'],
+  cornerRadius: CORNER_FIELDS,
+  layout: ['layoutMode'],
+  gap: ['itemSpacing'],
+  layoutIncludeStroke: ['strokesIncludedInLayout'],
+  padding: ['paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft'],
+  justifyContent: ['primaryAxisAlign'],
+  alignItems: ['counterAxisAlign'],
+  clip: ['clipsContent'],
+  placeholder: [],
+  slot: [],
+  innerRadius: ['arcData'],
+  startAngle: ['arcData'],
+  sweepAngle: ['arcData'],
+  polygonCount: ['pointCount'],
+  geometry: ['vectorNetwork'],
+  fillRule: ['vectorNetwork'],
+  viewBox: ['vectorNetwork'],
+  content: ['text'],
+  textGrowth: ['textAutoResize'],
+  fontFamily: ['fontFamily'],
+  fontSize: ['fontSize'],
+  fontWeight: ['fontWeight'],
+  fontStyle: ['italic'],
+  letterSpacing: ['letterSpacing'],
+  lineHeight: ['lineHeight'],
+  textAlign: ['textAlignHorizontal'],
+  textAlignVertical: ['textAlignVertical'],
+  underline: [],
+  strikethrough: [],
+  href: [],
+  library: [],
+  icon: [],
+  weight: [],
+  iconFontName: [],
+  iconFontFamily: [],
+  ref: []
+} satisfies Record<keyof NodeFields, readonly (keyof SceneNode)[]>
+
+const isProperty = (key: string): key is keyof typeof PROPERTY_FIELDS => key in PROPERTY_FIELDS
+
+/**
+ * The fields the properties `pen` carries write, whatever their values: pen.dev keeps a property
+ * an instance sets even when it equals its component's, so a later change to the component does
+ * not reach it.
+ */
+export function fieldsSetBy(pen: PenOverride): (keyof SceneNode)[] {
+  return Object.keys(pen).flatMap((key) => (isProperty(key) ? PROPERTY_FIELDS[key] : []))
 }
 
 function drawIconLayer(node: SceneNode, pen: PenNode, build: Build): void {
