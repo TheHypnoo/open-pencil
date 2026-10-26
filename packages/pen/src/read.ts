@@ -3,6 +3,7 @@ import * as v from 'valibot'
 import { SceneGraph } from '@open-pencil/scene-graph'
 
 import { pathNetwork } from './geometry'
+import { removeUnusedIconComponents } from './icons'
 import { createImageStore } from './images'
 import { inAncestorThemes, populateInstances } from './instances'
 import { spreadAround } from './layout'
@@ -112,6 +113,7 @@ export function buildPenGraph(doc: PenDocument, options: PenReadOptions = {}): S
     options.layout(graph)
     drawAtFinalSize(build, true)
   }
+  removeUnusedIconComponents(build)
 
   if (graph.getPages(true).length === 0) {
     graph.addPage('Page 1')

@@ -448,6 +448,7 @@ describe('parsePenFile — icons sized by layout', () => {
     const graph = parseLayoutDocument(
       [
         { ...box('mark', [icon]), reusable: true },
+        { id: 'same', type: 'ref', ref: 'mark' },
         { id: 'large', type: 'ref', ref: 'mark', width: 40, height: 40 }
       ],
       icons
@@ -456,8 +457,24 @@ describe('parsePenFile — icons sized by layout', () => {
       const [glyph] = graph.getChildren(iconId)
       return { width: glyph.width, height: glyph.height }
     }
-    const copy = graph.getNode('large')?.childIds[0] ?? ''
+    const copy = (instanceId: string) => graph.getNode(instanceId)?.childIds[0] ?? ''
     expect(glyphSize('icon')).toEqual({ width: 24, height: 24 })
-    expect(glyphSize(copy)).toEqual({ width: 40, height: 40 })
+    expect(glyphSize(copy('same'))).toEqual({ width: 24, height: 24 })
+    expect(glyphSize(copy('large'))).toEqual({ width: 40, height: 40 })
+  })
+
+  test('keeps only the icon components a laid-out icon shows', () => {
+    const graph = parseLayoutDocument(
+      [
+        { ...box('mark', [icon]), reusable: true },
+        { id: 'large', type: 'ref', ref: 'mark', width: 40, height: 40 }
+      ],
+      icons
+    )
+    const iconPage = graph.getPages(true).find((page) => page.name === 'Icons')
+    expect(graph.getChildren(iconPage?.id ?? '').map((component) => component.name)).toEqual([
+      'lucide/zap/24x24',
+      'lucide/zap/40x40'
+    ])
   })
 })
